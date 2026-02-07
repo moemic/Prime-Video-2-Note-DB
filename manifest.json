@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Prime Video → Notion Importer",
+  "version": "0.1.0",
+  "description": "Prime Videoの作品ページから情報を抜き出してNotion DBに保存します。",
+  "icons": {
+    "16": "icon128.png",
+    "32": "icon128.png",
+    "48": "icon128.png",
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://watch.amazon.co.jp/*",
+    "https://www.amazon.co.jp/*",
+    "https://api.notion.com/*"
+  ],
+  "action": {
+    "default_title": "Notionに保存",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon128.png",
+      "32": "icon128.png",
+      "48": "icon128.png",
+      "128": "icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://watch.amazon.co.jp/*",
+        "https://www.amazon.co.jp/*"
+      ],
+      "js": [
+        "content.js"
+      ]
+    }
+  ]
+}

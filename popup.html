@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      width: 380px;
+      background: linear-gradient(135deg, #1a1d21 0%, #2d3239 100%);
+      color: #e0e0e0;
+      padding: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #3a3f47;
+    }
+
+    .header h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #4db8ff;
+    }
+
+    .cover-section {
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 16px;
+    }
+
+    .carousel-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+      height: 150px;
+    }
+
+    .carousel-viewport {
+      flex: 1;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 6px;
+      background: #3a3f47;
+      position: relative;
+    }
+
+    .carousel-track {
+      display: flex;
+      height: 100%;
+      transition: transform 0.3s ease;
+    }
+
+    .carousel-item {
+      min-width: 120px;
+      height: 100%;
+      object-fit: contain;
+      cursor: pointer;
+      border: 3px solid transparent;
+      opacity: 0.7;
+      transition: all 0.2s;
+      background: #222;
+      border-radius: 4px;
+    }
+
+    .carousel-item:hover {
+      opacity: 0.8;
+    }
+
+    .carousel-item.selected {
+      border-color: #4db8ff;
+      opacity: 1;
+      z-index: 2;
+    }
+
+    .carousel-nav {
+      width: 24px;
+      height: 100%;
+      background: #3a3f47;
+      border: none;
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 12px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .carousel-nav:hover {
+      background: #4a5058;
+    }
+
+    .carousel-nav:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+
+    .image-counter {
+      width: 100%;
+      text-align: right;
+      font-size: 10px;
+      color: #888;
+      padding-right: 4px;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field-label {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .field input,
+    .field textarea {
+      width: 100%;
+      background: #3a3f47;
+      border: 1px solid #4a5058;
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: #e0e0e0;
+      font-size: 13px;
+      transition: border-color 0.2s;
+    }
+
+    .field input:focus,
+    .field textarea:focus {
+      outline: none;
+      border-color: #4db8ff;
+    }
+
+    .field textarea {
+      min-height: 60px;
+      resize: vertical;
+    }
+
+    .rating-section {
+      margin-bottom: 14px;
+    }
+
+    .rating-stars {
+      display: flex;
+      gap: 4px;
+    }
+
+    .star {
+      font-size: 24px;
+      cursor: pointer;
+      color: #4a5058;
+      transition: color 0.15s, transform 0.15s;
+    }
+
+    .star:hover {
+      transform: scale(1.1);
+    }
+
+    .star.active {
+      color: #ffd700;
+    }
+
+    .tags-input {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      background: #3a3f47;
+      border: 1px solid #4a5058;
+      border-radius: 6px;
+      padding: 8px;
+      min-height: 40px;
+    }
+
+    .tag {
+      background: #4db8ff;
+      color: #1a1d21;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tag .remove {
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .tags-input input {
+      flex: 1;
+      min-width: 100px;
+      background: transparent;
+      border: none;
+      color: #e0e0e0;
+      font-size: 12px;
+      padding: 4px;
+    }
+
+    .tags-input input:focus {
+      outline: none;
+    }
+
+    .tags-input input::placeholder {
+      color: #666;
+    }
+
+    .divider {
+      height: 1px;
+      background: #3a3f47;
+      margin: 16px 0;
+    }
+
+    .attributes-header {
+      font-size: 11px;
+      color: #666;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .save-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #0099cc 0%, #007399 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+    }
+
+    .save-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 153, 204, 0.3);
+    }
+
+    .save-btn:disabled {
+      background: #4a5058;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .status {
+      text-align: center;
+      font-size: 12px;
+      margin-top: 10px;
+      min-height: 18px;
+    }
+
+    .status.success {
+      color: #4caf50;
+    }
+
+    .status.error {
+      color: #f44336;
+    }
+
+    .status.loading {
+      color: #4db8ff;
+    }
+
+    .settings-toggle {
+      text-align: center;
+      margin-top: 12px;
+    }
+
+    .settings-toggle a {
+      color: #666;
+      font-size: 11px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .settings-toggle a:hover {
+      color: #888;
+    }
+
+    .settings-panel {
+      display: none;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #3a3f47;
+    }
+
+    .settings-panel.show {
+      display: block;
+    }
+
+    .settings-panel .field input {
+      font-size: 11px;
+      padding: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <span>🎬</span>
+    <h1>Prime Video → Notion</h1>
+  </div>
+
+  <div class="cover-section">
+    <div class="cover-section">
+      <div class="carousel-wrapper">
+        <button id="prevBtn" class="carousel-nav prev">◀</button>
+        <div class="carousel-viewport" id="carouselViewport">
+          <div class="carousel-track" id="carouselTrack">
+            <!-- Images injected here -->
+          </div>
+        </div>
+        <button id="nextBtn" class="carousel-nav next">▶</button>
+      </div>
+      <div id="imgCounter" class="image-counter">0/0</div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Title</label>
+      <input type="text" id="title" placeholder="作品タイトル" />
+    </div>
+
+    <div class="field">
+      <label class="field-label">Tags</label>
+      <div class="tags-input" id="tagsContainer">
+        <input type="text" id="tagInput" placeholder="入力してEnterで追加" />
+      </div>
+    </div>
+
+    <div class="rating-section">
+      <label class="field-label">Rating</label>
+      <div class="rating-stars" id="ratingStars">
+        <span class="star" data-value="1">★</span>
+        <span class="star" data-value="2">★</span>
+        <span class="star" data-value="3">★</span>
+        <span class="star" data-value="4">★</span>
+        <span class="star" data-value="5">★</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label">Note</label>
+      <textarea id="note" placeholder="概要やメモを入力"></textarea>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="save-btn" id="saveBtn">Notionに保存</button>
+    <p class="status" id="status"></p>
+
+    <div class="settings-toggle">
+      <a id="settingsToggle">⚙️ Settings</a>
+    </div>
+
+    <div class="settings-panel" id="settingsPanel">
+      <div class="field">
+        <label class="field-label">Notion Token</label>
+        <input type="password" id="token" placeholder="ntn_..." />
+      </div>
+      <div class="field">
+        <label class="field-label">Database ID</label>
+        <input type="text" id="db" placeholder="d419b59d..." />
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

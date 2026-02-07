@@ -1,0 +1,4 @@
+.DS_Store
+hello.txt
+node_modules/
+*.log
