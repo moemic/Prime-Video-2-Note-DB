@@ -13,7 +13,8 @@ const nextBtn = document.getElementById("nextBtn");
 const carouselTrack = document.getElementById("carouselTrack");
 const counterEl = document.getElementById("imgCounter");
 const suggestedTagsContainer = document.getElementById("suggestedTags");
-const statusSelect = document.getElementById("statusSelect");
+const statusInput = document.getElementById("statusInput");
+const statusOptions = document.getElementById("statusOptions");
 
 
 const statusEl = document.getElementById("status");
@@ -26,7 +27,7 @@ const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
 
 // 状態
-const VERSION = "v1.8.0";
+const VERSION = "v1.9.0";
 let currentRating = 0;
 let tags = [];
 let extractedData = {}; // nullからオブジェクトに変更
@@ -34,6 +35,7 @@ let imageCandidates = []; // 新しい状態変数
 let currentImageIndex = 0; // selected image
 let slideIndex = 0; // scroll position
 let existingPageId = null; // 既存ページID
+let currentStatusType = "status"; // Notion側のプロパティ型保持用
 
 // 初期化
 (async () => {
@@ -115,7 +117,7 @@ async function checkDuplicate(title) {
         extractedData.date = res.date;
       }
       if (res.status) {
-        statusSelect.value = res.status;
+        statusInput.value = res.status;
       }
 
       duplicateWarning.style.display = "block";
@@ -165,6 +167,7 @@ async function fetchNotionStatusOptions() {
   try {
     const res = await chrome.runtime.sendMessage({ type: "GET_NOTION_STATUS_OPTIONS" });
     if (res?.ok && res.options) {
+      currentStatusType = res.type;
       renderStatusOptions(res.options);
     }
   } catch (e) {
@@ -173,17 +176,16 @@ async function fetchNotionStatusOptions() {
 }
 
 function renderStatusOptions(options) {
-  const currentValue = statusSelect.value;
-  statusSelect.innerHTML = '';
+  const currentValue = statusInput.value;
+  statusOptions.innerHTML = '';
   options.forEach(opt => {
     const option = document.createElement("option");
     option.value = opt.name;
-    option.textContent = opt.name;
-    statusSelect.appendChild(option);
+    statusOptions.appendChild(option);
   });
   // 既に値が設定されている場合は維持（重複チェック後の可能性あり）
   if (currentValue && options.some(o => o.name === currentValue)) {
-    statusSelect.value = currentValue;
+    statusInput.value = currentValue;
   }
 }
 
@@ -432,7 +434,8 @@ saveBtn.addEventListener("click", async () => {
     rating: currentRating,
     director: extractedData?.director || "",
     date: extractedData?.date || new Date().toISOString().split('T')[0],
-    status: statusSelect.value,
+    status: statusInput.value,
+    statusType: currentStatusType,
     watched: true
   };
 

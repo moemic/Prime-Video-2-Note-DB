@@ -141,7 +141,8 @@
       transition: border-color 0.2s;
     }
 
-    .field select {
+    .field select,
+    .field input[list] {
       width: 100%;
       background: #3a3f47;
       border: 1px solid #4a5058;
@@ -151,6 +152,9 @@
       font-size: 13px;
       appearance: none;
       -webkit-appearance: none;
+    }
+
+    .field input[list] {
       background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 12px center;
@@ -413,9 +417,10 @@
 
   <div class="field">
     <label class="field-label">Status</label>
-    <select id="statusSelect">
-      <option value="鑑賞終了">鑑賞終了</option>
-    </select>
+    <input type="text" id="statusInput" list="statusOptions" placeholder="ステータスを選択または入力" />
+    <datalist id="statusOptions">
+      <option value="鑑賞終了"></option>
+    </datalist>
   </div>
 
   <div class="rating-section">

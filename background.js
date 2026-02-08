@@ -35,10 +35,15 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         "URL": { "url": payload.url || null },
         "概要": { "rich_text": [{ "text": { "content": payload.description || "" } }] },
         "鑑賞終了": { "checkbox": true },
-        "ステータス": { "status": { "name": payload.status || "鑑賞終了" } },
         "著者": { "rich_text": [{ "text": { "content": payload.director || "" } }] },
         "日付": { "date": { "start": payload.date || new Date().toISOString().split('T')[0] } }
     };
+
+    // ステータスの設定（status型またはselect型に対応）
+    // payload.statusType が渡されていればそれに従い、なければデフォルトで status を試す
+    const statusVal = payload.status || "鑑賞終了";
+    const statusType = payload.statusType || "status";
+    properties["ステータス"] = { [statusType]: { "name": statusVal } };
 
     // サムネイルを「カバー画像」プロパティ（Files & media）に入れる
     const allImages = [];
@@ -164,10 +169,14 @@ async function getNotionStatusOptions({ notionToken, notionDbId }) {
 
     const db = await res.json();
     const statusProperty = db.properties["ステータス"];
-    if (statusProperty && statusProperty.status) {
-        return statusProperty.status.options.map(opt => ({ name: opt.name, color: opt.color }));
+    if (statusProperty) {
+        if (statusProperty.status) {
+            return { type: "status", options: statusProperty.status.options.map(opt => ({ name: opt.name, color: opt.color })) };
+        } else if (statusProperty.select) {
+            return { type: "select", options: statusProperty.select.options.map(opt => ({ name: opt.name, color: opt.color })) };
+        }
     }
-    return [];
+    return { type: "status", options: [] };
 }
 
 async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
@@ -206,7 +215,7 @@ async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
             description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
             director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : "",
             date: props["日付"]?.date ? props["日付"].date.start : "",
-            status: props["ステータス"]?.status ? props["ステータス"].status.name : ""
+            status: props["ステータス"]?.status ? props["ステータス"].status.name : (props["ステータス"]?.select ? props["ステータス"].select.name : "")
         };
         return existingData;
     }
