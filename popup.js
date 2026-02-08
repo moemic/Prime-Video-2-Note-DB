@@ -25,7 +25,7 @@ const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
 
 // 状態
-const VERSION = "v1.2.0";
+const VERSION = "v1.7.0";
 let currentRating = 0;
 let tags = [];
 let extractedData = {}; // nullからオブジェクトに変更
