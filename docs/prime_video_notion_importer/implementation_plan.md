@@ -51,6 +51,13 @@ UI変更に伴うロジックの更新。
 - `ジャンル` (multi_select) ← タグ入力から
 - `オススメ度` (select) ← 星評価から
 
+### [Bug Fix] Native Notion Comments
+Change the comment saving behavior from adding page body blocks to using the native Notion Comments API.
+
+#### [MODIFY] [background.js](file:///Users/takahiro/Library/Mobile%20Documents/iCloud~md~obsidian/Documents/Projects/chrome%E6%8B%A1%E5%BC%B5%E6%A9%9F%E8%83%BD%20-%20Prime%20Video%202%20Note%E3%82%A4%E3%83%B3%E3%83%9D%E3%83%BC%E3%82%AF/background.js)
+- Remove `children` blocks that previously contained the comment.
+- After page creation, if a comment is present, call `POST /v1/comments` using the new page ID as the parent.
+
 ---
 
 
