@@ -13,6 +13,7 @@ const nextBtn = document.getElementById("nextBtn");
 const carouselTrack = document.getElementById("carouselTrack");
 const counterEl = document.getElementById("imgCounter");
 const suggestedTagsContainer = document.getElementById("suggestedTags");
+const statusSelect = document.getElementById("statusSelect");
 
 
 const statusEl = document.getElementById("status");
@@ -83,8 +84,9 @@ let existingPageId = null; // 既存ページID
     carouselTrack.innerHTML = '<div style="color:#aaa; padding:10px;">抽出に失敗</div>';
   }
 
-  // 既存タグの取得
+  // 既存タグ・ステータス候補の取得
   fetchNotionTags();
+  fetchNotionStatusOptions();
 })();
 
 async function checkDuplicate(title) {
@@ -111,6 +113,9 @@ async function checkDuplicate(title) {
       }
       if (res.date) {
         extractedData.date = res.date;
+      }
+      if (res.status) {
+        statusSelect.value = res.status;
       }
 
       duplicateWarning.style.display = "block";
@@ -153,6 +158,32 @@ function toggleTagFromChip(text, chip) {
     removeTag(text);
   } else {
     addTag(text);
+  }
+}
+
+async function fetchNotionStatusOptions() {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "GET_NOTION_STATUS_OPTIONS" });
+    if (res?.ok && res.options) {
+      renderStatusOptions(res.options);
+    }
+  } catch (e) {
+    console.error("ステータス候補取得エラー:", e);
+  }
+}
+
+function renderStatusOptions(options) {
+  const currentValue = statusSelect.value;
+  statusSelect.innerHTML = '';
+  options.forEach(opt => {
+    const option = document.createElement("option");
+    option.value = opt.name;
+    option.textContent = opt.name;
+    statusSelect.appendChild(option);
+  });
+  // 既に値が設定されている場合は維持（重複チェック後の可能性あり）
+  if (currentValue && options.some(o => o.name === currentValue)) {
+    statusSelect.value = currentValue;
   }
 }
 
@@ -401,6 +432,7 @@ saveBtn.addEventListener("click", async () => {
     rating: currentRating,
     director: extractedData?.director || "",
     date: extractedData?.date || new Date().toISOString().split('T')[0],
+    status: statusSelect.value,
     watched: true
   };
 

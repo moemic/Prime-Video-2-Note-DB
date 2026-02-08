@@ -35,7 +35,7 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         "URL": { "url": payload.url || null },
         "概要": { "rich_text": [{ "text": { "content": payload.description || "" } }] },
         "鑑賞終了": { "checkbox": true },
-        "ステータス": { "select": { "name": "鑑賞終了" } },
+        "ステータス": { "status": { "name": payload.status || "鑑賞終了" } },
         "著者": { "rich_text": [{ "text": { "content": payload.director || "" } }] },
         "日付": { "date": { "start": payload.date || new Date().toISOString().split('T')[0] } }
     };
@@ -148,6 +148,28 @@ async function getNotionDatabaseTags({ notionToken, notionDbId }) {
     return [];
 }
 
+async function getNotionStatusOptions({ notionToken, notionDbId }) {
+    const res = await fetch(`https://api.notion.com/v1/databases/${notionDbId}`, {
+        method: "GET",
+        headers: {
+            "Authorization": `Bearer ${notionToken}`,
+            "Notion-Version": NOTION_VERSION
+        }
+    });
+
+    if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || `${res.status} ${res.statusText}`);
+    }
+
+    const db = await res.json();
+    const statusProperty = db.properties["ステータス"];
+    if (statusProperty && statusProperty.status) {
+        return statusProperty.status.options.map(opt => ({ name: opt.name, color: opt.color }));
+    }
+    return [];
+}
+
 async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
     const res = await fetch(`https://api.notion.com/v1/databases/${notionDbId}/query`, {
         method: "POST",
@@ -183,7 +205,8 @@ async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
             tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
             description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
             director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : "",
-            date: props["日付"]?.date ? props["日付"].date.start : ""
+            date: props["日付"]?.date ? props["日付"].date.start : "",
+            status: props["ステータス"]?.status ? props["ステータス"].status.name : ""
         };
         return existingData;
     }
@@ -235,6 +258,24 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 sendResponse({ ok: true, ...result });
             } catch (e) {
                 console.error("Duplicate Check Error:", e);
+                sendResponse({ ok: false, error: String(e.message || e) });
+            }
+        })();
+        return true;
+    }
+
+    if (msg?.type === "GET_NOTION_STATUS_OPTIONS") {
+        (async () => {
+            const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
+            if (!notionToken || !notionDbId) {
+                sendResponse({ ok: false, error: "Settings missing" });
+                return;
+            }
+            try {
+                const options = await getNotionStatusOptions({ notionToken, notionDbId });
+                sendResponse({ ok: true, options });
+            } catch (e) {
+                console.error("Notion Status Error:", e);
                 sendResponse({ ok: false, error: String(e.message || e) });
             }
         })();
