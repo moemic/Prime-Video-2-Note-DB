@@ -57,31 +57,12 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         properties
     };
 
-    // コメントをページ本文に追加
-    if (payload.comment) {
-        body.children = [
-            {
-                "object": "block",
-                "type": "heading_2",
-                "heading_2": {
-                    "rich_text": [{ "text": { "content": "感想・コメント" } }]
-                }
-            },
-            {
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "rich_text": [{ "text": { "content": payload.comment } }]
-                }
-            }
-        ];
-    }
-
     // ページ自体のカバー画像にも設定
     if (payload.image) {
         body.cover = { type: "external", external: { url: payload.image } };
     }
 
+    // 1. ページを作成
     const res = await fetch("https://api.notion.com/v1/pages", {
         method: "POST",
         headers: {
@@ -96,7 +77,30 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         const errorData = await res.json();
         throw new Error(errorData.message || `${res.status} ${res.statusText}`);
     }
-    return await res.json();
+
+    const newPage = await res.json();
+
+    // 2. コメントがあれば、Notionのコメント機能を使って投稿 (POST /v1/comments)
+    if (payload.comment) {
+        try {
+            await fetch("https://api.notion.com/v1/comments", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${notionToken}`,
+                    "Notion-Version": NOTION_VERSION,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    "parent": { "page_id": newPage.id },
+                    "rich_text": [{ "text": { "content": payload.comment } }]
+                })
+            });
+        } catch (e) {
+            console.error("Comment API Error:", e);
+        }
+    }
+
+    return newPage;
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
