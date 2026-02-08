@@ -281,8 +281,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 return;
             }
             try {
-                const options = await getNotionStatusOptions({ notionToken, notionDbId });
-                sendResponse({ ok: true, options });
+                const result = await getNotionStatusOptions({ notionToken, notionDbId });
+                sendResponse({ ok: true, ...result });
             } catch (e) {
                 console.error("Notion Status Error:", e);
                 sendResponse({ ok: false, error: String(e.message || e) });

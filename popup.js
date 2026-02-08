@@ -28,7 +28,7 @@ const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
 
 // 状態
-const VERSION = "v1.10.0";
+const VERSION = "v1.11.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = "鑑賞終了"; // 初期値
@@ -85,8 +85,7 @@ let currentStatusType = "status"; // Notion側のプロパティ型保持用
     }
   } catch (e) {
     console.error("抽出エラー:", e);
-    // coverPlaceholder.textContent = "抽出に失敗"; // Removed coverPlaceholder
-    carouselTrack.innerHTML = '<div style="color:#aaa; padding:10px;">抽出に失敗</div>';
+    carouselTrack.innerHTML = '<div style="color:#aaa; padding:10px; font-size:11px;">抽出に失敗しました。ページをリロードして再度お試しください。</div>';
   }
 
   // 既存タグ・ステータス候補の取得
@@ -171,10 +170,10 @@ async function fetchNotionStatusOptions() {
   try {
     const res = await chrome.runtime.sendMessage({ type: "GET_NOTION_STATUS_OPTIONS" });
     if (res?.ok && res.options) {
-      currentStatusType = res.type;
-      statusOptionsData = res.options; // データ保持
+      currentStatusType = res.type || "status";
+      statusOptionsData = res.options;
       renderSuggestedStatuses();
-      renderStatus(); // 初期表示更新
+      renderStatus();
     }
   } catch (e) {
     console.error("ステータス候補取得エラー:", e);
