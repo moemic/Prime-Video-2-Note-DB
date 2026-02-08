@@ -268,6 +268,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // 重複排除、サイズ取得、ソート
     // ---------------------------------------------------------
     (async () => {
+        // タイトルの決定とクリーニング
+        let rawTitle = pickLongest(ogTitle, domTitle, title);
+        if (!rawTitle) rawTitle = document.title;
+        const finalTitle = cleanTitle(rawTitle);
+
         const uniqueImages = [...new Set(candidates)];
 
         // 各画像のサイズを取得
