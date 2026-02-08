@@ -117,6 +117,7 @@
       padding-right: 4px;
     }
 
+
     .field {
       margin-bottom: 14px;
     }
@@ -318,68 +319,72 @@
   </div>
 
   <div class="cover-section">
-    <div class="cover-section">
-      <div class="carousel-wrapper">
-        <button id="prevBtn" class="carousel-nav prev">◀</button>
-        <div class="carousel-viewport" id="carouselViewport">
-          <div class="carousel-track" id="carouselTrack">
-            <!-- Images injected here -->
-          </div>
+    <div class="carousel-wrapper">
+      <button id="prevBtn" class="carousel-nav prev">◀</button>
+      <div class="carousel-viewport" id="carouselViewport">
+        <div class="carousel-track" id="carouselTrack">
+          <!-- Images injected here -->
         </div>
-        <button id="nextBtn" class="carousel-nav next">▶</button>
       </div>
-      <div id="imgCounter" class="image-counter">0/0</div>
+      <button id="nextBtn" class="carousel-nav next">▶</button>
     </div>
+    <div id="imgCounter" class="image-counter">0/0</div>
+  </div>
 
+  <div class="field">
+    <label class="field-label">Title</label>
+    <input type="text" id="title" placeholder="作品タイトル" />
+  </div>
+
+  <div class="field">
+    <label class="field-label">Tags</label>
+    <div class="tags-input" id="tagsContainer">
+      <input type="text" id="tagInput" placeholder="入力してEnterで追加" />
+    </div>
+  </div>
+
+  <div class="rating-section">
+    <label class="field-label">Rating</label>
+    <div class="rating-stars" id="ratingStars">
+      <span class="star" data-value="1">★</span>
+      <span class="star" data-value="2">★</span>
+      <span class="star" data-value="3">★</span>
+      <span class="star" data-value="4">★</span>
+      <span class="star" data-value="5">★</span>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="field-label">Note</label>
+    <textarea id="note" placeholder="概要やメモを入力"></textarea>
+  </div>
+
+  <div class="field">
+    <label class="field-label">Comment</label>
+    <textarea id="comment" placeholder="あなたの感想・コメント"></textarea>
+  </div>
+
+  <div class="divider"></div>
+
+  <button class="save-btn" id="saveBtn">Notionに保存</button>
+  <p class="status" id="status"></p>
+
+  <div class="settings-toggle">
+    <a id="settingsToggle">⚙️ Settings</a>
+  </div>
+
+  <div class="settings-panel" id="settingsPanel">
     <div class="field">
-      <label class="field-label">Title</label>
-      <input type="text" id="title" placeholder="作品タイトル" />
+      <label class="field-label">Notion Token</label>
+      <input type="password" id="token" placeholder="ntn_..." />
     </div>
-
     <div class="field">
-      <label class="field-label">Tags</label>
-      <div class="tags-input" id="tagsContainer">
-        <input type="text" id="tagInput" placeholder="入力してEnterで追加" />
-      </div>
+      <label class="field-label">Database ID</label>
+      <input type="text" id="db" placeholder="d419b59d..." />
     </div>
+  </div>
 
-    <div class="rating-section">
-      <label class="field-label">Rating</label>
-      <div class="rating-stars" id="ratingStars">
-        <span class="star" data-value="1">★</span>
-        <span class="star" data-value="2">★</span>
-        <span class="star" data-value="3">★</span>
-        <span class="star" data-value="4">★</span>
-        <span class="star" data-value="5">★</span>
-      </div>
-    </div>
-
-    <div class="field">
-      <label class="field-label">Note</label>
-      <textarea id="note" placeholder="概要やメモを入力"></textarea>
-    </div>
-
-    <div class="divider"></div>
-
-    <button class="save-btn" id="saveBtn">Notionに保存</button>
-    <p class="status" id="status"></p>
-
-    <div class="settings-toggle">
-      <a id="settingsToggle">⚙️ Settings</a>
-    </div>
-
-    <div class="settings-panel" id="settingsPanel">
-      <div class="field">
-        <label class="field-label">Notion Token</label>
-        <input type="password" id="token" placeholder="ntn_..." />
-      </div>
-      <div class="field">
-        <label class="field-label">Database ID</label>
-        <input type="text" id="db" placeholder="d419b59d..." />
-      </div>
-    </div>
-
-    <script src="popup.js"></script>
+  <script src="popup.js"></script>
 </body>
 
 </html>

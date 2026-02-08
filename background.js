@@ -23,10 +23,18 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     };
 
     // サムネイルを「カバー画像」プロパティ（Files & media）に入れる
+    // 選択された画像 + 残りの画像をすべて保存
+    const allImages = [];
     if (payload.image) {
-        properties["カバー画像"] = {
-            "files": [{ "name": "thumbnail", "external": { "url": payload.image } }]
-        };
+        allImages.push({ "name": "cover", "external": { "url": payload.image } });
+    }
+    if (payload.images && payload.images.length > 0) {
+        payload.images.forEach((url, i) => {
+            allImages.push({ "name": `image_${i + 1}`, "external": { "url": url } });
+        });
+    }
+    if (allImages.length > 0) {
+        properties["カバー画像"] = { "files": allImages };
     }
 
     // タグを「ジャンル」（multi_select）に入れる
@@ -48,6 +56,26 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         parent: { database_id: notionDbId },
         properties
     };
+
+    // コメントをページ本文に追加
+    if (payload.comment) {
+        body.children = [
+            {
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{ "text": { "content": "感想・コメント" } }]
+                }
+            },
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{ "text": { "content": payload.comment } }]
+                }
+            }
+        ];
+    }
 
     // ページ自体のカバー画像にも設定
     if (payload.image) {

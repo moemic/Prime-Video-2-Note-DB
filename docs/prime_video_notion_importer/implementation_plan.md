@@ -13,11 +13,11 @@ Prime Videoの作品ページから情報を抽出し、Notionのデータベー
 >    - ステータス: `ステータス` (select型。登録時に「鑑賞終了」をセット)
 
 
-## 提案される変更
+## Proposed Changes
 
 ### [Chrome Extension Component]
 
-#### [NEW] [manifest.json](file:///Users/takahiro/Library/Mobile%20Documents/iCloud~md~obsidian/Documents/Projects/chrome%E6%8B%A1%E5%BC%B5%E6%A9%9F%E8%83%BD%20-%20Prime%20Video%202%20Note%E3%82%A4%E3%83%B3%E3%83%9D%E3%83%BC%E3%82%AF/manifest.json)
+#### [NEW] [manifest.json](file:///Users/takahiro/Library/Mobile%20Documents/i iCloud~md~obsidian/Documents/Projects/chrome%E6%8B%A1%E5%BC%B5%E6%A9%9F%E8%83%BD%20-%20Prime%20Video%202%20Note%E3%82%A4%E3%83%B3%E3%83%9D%E3%83%BC%E3%82%AF/manifest.json)
 Manifest V3 形式での定義。必要な権限（activeTab, scripting, storage）とホスト権限（amazon.co.jp, api.notion.com）を設定します。
 
 #### [NEW] [popup.html](file:///Users/takahiro/Library/Mobile%20Documents/iCloud~md~obsidian/Documents/Projects/chrome%E6%8B%A1%E5%BC%B5%E6%A9%9F%E8%83%BD%20-%20Prime%20Video%202%20Note%E3%82%A4%E3%83%B3%E3%83%9D%E3%83%BC%E3%82%AF/popup.html)

@@ -40,14 +40,46 @@ function tryDomImage(selectors) {
 
 // JSONデータから高画質画像を抽出する（最強ロジック）
 function tryJsonMetadata() {
+    const images = [];
     try {
-        const script = document.getElementById("dv-web-store-template");
-        if (!script) return "";
-        return "";
+        // 1. LD-JSONから取得
+        const ldJsons = document.querySelectorAll('script[type="application/ld+json"]');
+        ldJsons.forEach(script => {
+            try {
+                const data = JSON.parse(script.textContent);
+                if (data.image) {
+                    if (typeof data.image === 'string') images.push(data.image);
+                    else if (data.image.url) images.push(data.image.url);
+                    else if (Array.isArray(data.image)) images.push(...data.image);
+                }
+            } catch (e) { }
+        });
+
+        // 2. dv-web-store-template (Amazon特有のデータ) から取得
+        const storeTemplate = document.getElementById("dv-web-store-template");
+        if (storeTemplate) {
+            const matches = storeTemplate.textContent.match(/https?:\/\/[^"']+\.media-amazon\.com\/images\/I\/[a-zA-Z0-9\-\._\+]+(?:\.jpg|\.png)/g);
+            if (matches) images.push(...matches);
+        }
+
+        // 3. 他のscript内のJSONライクな構造からpackshotを探す
+        const scripts = document.querySelectorAll('script');
+        scripts.forEach(script => {
+            const content = script.textContent;
+            if (content && content.includes('packshot')) {
+                const packshotMatches = content.match(/"packshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
+                if (packshotMatches) {
+                    packshotMatches.forEach(m => {
+                        const url = m.match(/https?:\/\/[^"]+/);
+                        if (url) images.push(url[0]);
+                    });
+                }
+            }
+        });
     } catch (e) {
         console.error("JSON Parse Error", e);
-        return "";
     }
+    return images.filter(isValidImage);
 }
 
 // 背景画像を抽出する（グラデーション対応）
@@ -80,6 +112,15 @@ function isValidImage(url) {
     if (lower.includes("spacer")) return false;
     if (lower.includes(".gif") && !lower.includes("og")) return false;
     return true;
+}
+
+// Amazonの画像URLからリサイズパラメータを除去して高画質版を取得する
+function getHighResUrl(url) {
+    if (!url || !url.includes(".media-amazon.com/images/I/")) return url;
+    // ._SX300_.jpg のような部分を消して .jpg にする
+    // 例: https://.../I/abc._SX300_.jpg -> https://.../I/abc.jpg
+    const cleaned = url.replace(/\._[^/]+(?=\.[a-z]+$)/, "");
+    return cleaned;
 }
 
 // タイトルのクリーニング
@@ -120,7 +161,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         "[data-testid='synopsis']",
         ".dv-node-dp-synopsis",
         ".synopsis",
-        "._16S9_p"
+        "._16S9_p",
+        "._1H6ABQ"
     ]);
 
     // ---------------------------------------------------------
@@ -205,31 +247,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
     // D. Metadata & JSON
     if (isValidImage(ogImage)) candidates.push(ogImage);
-
-    // E. JSON from LD-JSON
-    try {
-        const ldJson = document.querySelector('script[type="application/ld+json"]');
-        if (ldJson) {
-            const data = JSON.parse(ldJson.textContent);
-            if (data.image) {
-                if (typeof data.image === 'string') candidates.push(data.image);
-                else if (data.image.url) candidates.push(data.image.url);
-            }
-        }
-    } catch (e) { }
+    const jsonImages = tryJsonMetadata();
+    candidates.push(...jsonImages);
 
     // ---------------------------------------------------------
-    // 重複排除とソート
+    // 重複排除と高画質化
     // ---------------------------------------------------------
     const uniqueImages = [...new Set(candidates)];
-
-    // ソート戦略:
-    // 1. 横長（ランドスケープ）を優先したいが、URLだけでは判定不可なものもある。
-    //    しかし、Visual Extractionで順序良く入っているはずなので、極力元の順序を維持しつつ、
-    //    明らかに「poster」っぽいファイル名より「hero」っぽいものがあれば...といったヒューリスティックは難しい。
-    //    単純に全部返すのがベスト。ユーザーが選ぶのだから。
-
-    const finalImages = uniqueImages.slice(0, 30); // 多すぎるとUIが重くなるので制限
+    const highResImages = uniqueImages.map(getHighResUrl);
+    const finalImages = [...new Set(highResImages)].slice(0, 30);
     const image = finalImages.length > 0 ? finalImages[0] : "";
 
     // タイトルの決定とクリーニング

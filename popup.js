@@ -2,6 +2,7 @@
 // DOM Elements
 const titleEl = document.getElementById("title");
 const noteEl = document.getElementById("note");
+const commentEl = document.getElementById("comment");
 const tagInput = document.getElementById("tagInput");
 const tagsContainer = document.getElementById("tagsContainer");
 const ratingStars = document.getElementById("ratingStars");
@@ -12,7 +13,7 @@ const nextBtn = document.getElementById("nextBtn");
 const carouselTrack = document.getElementById("carouselTrack");
 const counterEl = document.getElementById("imgCounter");
 
-const saveBtn = document.getElementById("saveBtn");
+
 const statusEl = document.getElementById("status");
 const settingsToggle = document.getElementById("settingsToggle");
 const settingsPanel = document.getElementById("settingsPanel");
@@ -286,14 +287,19 @@ saveBtn.addEventListener("click", async () => {
   await chrome.storage.local.set({ notionToken, notionDbId });
 
   // 選択された画像を使用
-  const finalImage = imageCandidates.length > 0 ? imageCandidates[currentImageIndex] : "";
+  const coverImage = imageCandidates.length > 0 ? imageCandidates[currentImageIndex] : "";
+
+  // 残りの画像（カバー以外）をファイルプロパティ用に収集
+  const otherImages = imageCandidates.filter((_, i) => i !== currentImageIndex);
 
   // ペイロードを構築
   const payload = {
     title: titleEl.value.trim(),
     description: noteEl.value.trim(),
+    comment: commentEl.value.trim(),
     url: extractedData?.url || "",
-    image: finalImage,
+    image: coverImage,
+    images: otherImages,
     tags: tags,
     rating: currentRating,
     watched: true

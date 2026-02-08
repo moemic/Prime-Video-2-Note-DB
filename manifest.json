@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "description": "Prime Videoの作品ページから情報を抜き出してNotion DBに保存します。",
   "icons": {
-    "16": "icon128.png",
-    "32": "icon128.png",
-    "48": "icon128.png",
-    "128": "icon128.png"
+    "16": "icons/icon128.png",
+    "32": "icons/icon128.png",
+    "48": "icons/icon128.png",
+    "128": "icons/icon128.png"
   },
   "permissions": [
     "activeTab",
@@ -23,10 +23,10 @@
     "default_title": "Notionに保存",
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icon128.png",
-      "32": "icon128.png",
-      "48": "icon128.png",
-      "128": "icon128.png"
+      "16": "icons/icon128.png",
+      "32": "icons/icon128.png",
+      "48": "icons/icon128.png",
+      "128": "icons/icon128.png"
     }
   },
   "background": {
