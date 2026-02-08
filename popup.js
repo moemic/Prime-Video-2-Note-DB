@@ -21,6 +21,8 @@ const settingsPanel = document.getElementById("settingsPanel");
 const tokenEl = document.getElementById("token");
 const dbEl = document.getElementById("db");
 const saveBtn = document.getElementById("saveBtn"); // 明示的に取得
+const duplicateWarning = document.getElementById("duplicateWarning");
+const duplicateLink = document.getElementById("duplicateLink");
 
 // 状態
 const VERSION = "v1.2.0";
@@ -56,6 +58,13 @@ let slideIndex = 0; // scroll position
     chrome.storage.local.set({ notionDbId: dbEl.value.trim() });
   });
 
+  // タイトル変更時に重複チェックを再実行
+  titleEl.addEventListener("blur", () => {
+    if (titleEl.value.trim()) {
+      checkDuplicate(titleEl.value.trim());
+    }
+  });
+
   // ページからデータを抽出
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -76,6 +85,21 @@ let slideIndex = 0; // scroll position
   // 既存タグの取得
   fetchNotionTags();
 })();
+
+async function checkDuplicate(title) {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "CHECK_DUPLICATE", title });
+    if (res?.ok && res.duplicate) {
+      duplicateWarning.style.display = "block";
+      duplicateLink.href = res.url;
+    } else {
+      duplicateWarning.style.display = "none";
+    }
+  } catch (e) {
+    console.error("重複チェックエラー:", e);
+    duplicateWarning.style.display = "none";
+  }
+}
 
 async function fetchNotionTags() {
   try {
@@ -120,6 +144,8 @@ function handleExtractedMessage(data) {
   if (data.title) {
     titleEl.value = data.title;
     extractedData.title = data.title;
+    // 重複チェック実行
+    checkDuplicate(data.title);
   }
   if (data.description) {
     noteEl.value = data.description;

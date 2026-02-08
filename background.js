@@ -127,6 +127,37 @@ async function getNotionDatabaseTags({ notionToken, notionDbId }) {
     return [];
 }
 
+async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
+    const res = await fetch(`https://api.notion.com/v1/databases/${notionDbId}/query`, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${notionToken}`,
+            "Notion-Version": NOTION_VERSION,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            filter: {
+                property: "Name",
+                title: {
+                    equals: title
+                }
+            }
+        })
+    });
+
+    if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || `${res.status} ${res.statusText}`);
+    }
+
+    const data = await res.json();
+    if (data.results && data.results.length > 0) {
+        // 最初に見つかったページのURLを返す
+        return { duplicate: true, url: data.results[0].url };
+    }
+    return { duplicate: false };
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "CREATE_NOTION_PAGE") {
         (async () => {
@@ -154,6 +185,24 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 sendResponse({ ok: true, tags });
             } catch (e) {
                 console.error("Notion DB Error:", e);
+                sendResponse({ ok: false, error: String(e.message || e) });
+            }
+        })();
+        return true;
+    }
+
+    if (msg?.type === "CHECK_DUPLICATE") {
+        (async () => {
+            const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
+            if (!notionToken || !notionDbId) {
+                sendResponse({ ok: false, error: "Settings missing" });
+                return;
+            }
+            try {
+                const result = await checkDuplicateTitle({ notionToken, notionDbId, title: msg.title });
+                sendResponse({ ok: true, ...result });
+            } catch (e) {
+                console.error("Duplicate Check Error:", e);
                 sendResponse({ ok: false, error: String(e.message || e) });
             }
         })();

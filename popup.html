@@ -288,6 +288,24 @@
       box-shadow: none;
     }
 
+    .duplicate-warning {
+      display: none;
+      background: rgba(255, 166, 0, 0.1);
+      border: 1px solid #ffa600;
+      color: #ffa600;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .duplicate-warning a {
+      color: #ffa600;
+      text-decoration: underline;
+      font-weight: 500;
+    }
+
     .status {
       text-align: center;
       font-size: 12px;
@@ -363,6 +381,9 @@
   <div class="field">
     <label class="field-label">Title</label>
     <input type="text" id="title" placeholder="作品タイトル" />
+    <div id="duplicateWarning" class="duplicate-warning">
+      ⚠️ すでに登録されています：<a id="duplicateLink" target="_blank">Notionを開く</a>
+    </div>
   </div>
 
   <div class="field">
