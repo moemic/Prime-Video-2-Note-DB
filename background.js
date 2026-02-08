@@ -105,19 +105,58 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     return newPage;
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type !== "CREATE_NOTION_PAGE") return;
-
-    (async () => {
-        const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
-        try {
-            await createNotionPage({ notionToken, notionDbId, payload: msg.payload });
-            sendResponse({ ok: true });
-        } catch (e) {
-            console.error("Notion API Error:", e);
-            sendResponse({ ok: false, error: String(e.message || e) });
+async function getNotionDatabaseTags({ notionToken, notionDbId }) {
+    const res = await fetch(`https://api.notion.com/v1/databases/${notionDbId}`, {
+        method: "GET",
+        headers: {
+            "Authorization": `Bearer ${notionToken}`,
+            "Notion-Version": NOTION_VERSION
         }
-    })();
+    });
 
-    return true; // 非同期レスポンスのため必要
+    if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || `${res.status} ${res.statusText}`);
+    }
+
+    const db = await res.json();
+    const genreProperty = db.properties["ジャンル"];
+    if (genreProperty && genreProperty.multi_select) {
+        return genreProperty.multi_select.options.map(opt => opt.name);
+    }
+    return [];
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === "CREATE_NOTION_PAGE") {
+        (async () => {
+            const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
+            try {
+                await createNotionPage({ notionToken, notionDbId, payload: msg.payload });
+                sendResponse({ ok: true });
+            } catch (e) {
+                console.error("Notion API Error:", e);
+                sendResponse({ ok: false, error: String(e.message || e) });
+            }
+        })();
+        return true;
+    }
+
+    if (msg?.type === "GET_NOTION_TAGS") {
+        (async () => {
+            const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
+            if (!notionToken || !notionDbId) {
+                sendResponse({ ok: false, error: "Settings missing" });
+                return;
+            }
+            try {
+                const tags = await getNotionDatabaseTags({ notionToken, notionDbId });
+                sendResponse({ ok: true, tags });
+            } catch (e) {
+                console.error("Notion DB Error:", e);
+                sendResponse({ ok: false, error: String(e.message || e) });
+            }
+        })();
+        return true;
+    }
 });

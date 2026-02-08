@@ -203,6 +203,35 @@
       font-weight: bold;
     }
 
+    .suggested-tags {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag-chip {
+      background: #2d3239;
+      color: #888;
+      border: 1px solid #4a5058;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tag-chip:hover {
+      background: #3a414a;
+      border-color: #666;
+    }
+
+    .tag-chip.selected {
+      background: rgba(77, 184, 255, 0.15);
+      color: #4db8ff;
+      border-color: #4db8ff;
+    }
+
     .tags-input input {
       flex: 1;
       min-width: 100px;
@@ -340,6 +369,9 @@
     <label class="field-label">Tags</label>
     <div class="tags-input" id="tagsContainer">
       <input type="text" id="tagInput" placeholder="入力してEnterで追加" />
+    </div>
+    <div class="suggested-tags" id="suggestedTags">
+      <!-- Suggested tags from Notion injected here -->
     </div>
   </div>
 

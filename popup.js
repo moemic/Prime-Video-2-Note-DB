@@ -12,6 +12,7 @@ const prevBtn = document.getElementById("prevBtn");
 const nextBtn = document.getElementById("nextBtn");
 const carouselTrack = document.getElementById("carouselTrack");
 const counterEl = document.getElementById("imgCounter");
+const suggestedTagsContainer = document.getElementById("suggestedTags");
 
 
 const statusEl = document.getElementById("status");
@@ -71,7 +72,41 @@ let slideIndex = 0; // scroll position
     // coverPlaceholder.textContent = "抽出に失敗"; // Removed coverPlaceholder
     carouselTrack.innerHTML = '<div style="color:#aaa; padding:10px;">抽出に失敗</div>';
   }
+
+  // 既存タグの取得
+  fetchNotionTags();
 })();
+
+async function fetchNotionTags() {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "GET_NOTION_TAGS" });
+    if (res?.ok && res.tags) {
+      renderSuggestedTags(res.tags);
+    }
+  } catch (e) {
+    console.error("タグ取得エラー:", e);
+  }
+}
+
+function renderSuggestedTags(notionTags) {
+  suggestedTagsContainer.innerHTML = '';
+  notionTags.forEach(tag => {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip";
+    chip.textContent = tag;
+    if (tags.includes(tag)) chip.classList.add("selected");
+    chip.onclick = () => toggleTagFromChip(tag, chip);
+    suggestedTagsContainer.appendChild(chip);
+  });
+}
+
+function toggleTagFromChip(text, chip) {
+  if (tags.includes(text)) {
+    removeTag(text);
+  } else {
+    addTag(text);
+  }
+}
 
 // メッセージリスナー
 chrome.runtime.onMessage.addListener((msg) => {
@@ -217,6 +252,12 @@ function renderTags() {
     tagEl.innerHTML = `${tag} <span class="remove">×</span>`;
     tagEl.querySelector(".remove").addEventListener("click", () => removeTag(tag));
     tagsContainer.insertBefore(tagEl, tagInput);
+  });
+
+  // チップの選択状態を更新
+  const chips = suggestedTagsContainer.querySelectorAll(".tag-chip");
+  chips.forEach(chip => {
+    chip.classList.toggle("selected", tags.includes(chip.textContent));
   });
 }
 
