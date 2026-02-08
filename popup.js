@@ -109,6 +109,9 @@ async function checkDuplicate(title) {
       if (res.director) {
         extractedData.director = res.director;
       }
+      if (res.date) {
+        extractedData.date = res.date;
+      }
 
       duplicateWarning.style.display = "block";
     } else {
@@ -397,7 +400,7 @@ saveBtn.addEventListener("click", async () => {
     tags: tags,
     rating: currentRating,
     director: extractedData?.director || "",
-    date: new Date().toISOString().split('T')[0],
+    date: extractedData?.date || new Date().toISOString().split('T')[0],
     watched: true
   };
 

@@ -182,7 +182,8 @@ async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
             rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
             tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
             description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
-            director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : ""
+            director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : "",
+            date: props["日付"]?.date ? props["日付"].date.start : ""
         };
         return existingData;
     }
