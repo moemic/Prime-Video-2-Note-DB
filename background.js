@@ -16,7 +16,7 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     console.log("Full Payload received in background:", JSON.stringify(payload, null, 2));
     // 動画鑑賞リストDBのプロパティ構造
     const properties = {
-        "Name": { "title": [{ "text": { "content": payload.title || "" } }] },
+        "Name": { "title": [{ "text": { "content": `[v1.1.4] ${payload.title}` || "" } }] },
         "URL": { "url": payload.url || null },
         "概要": { "rich_text": [{ "text": { "content": payload.description || "" } }] },
         "鑑賞終了": { "checkbox": true },

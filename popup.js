@@ -22,7 +22,7 @@ const dbEl = document.getElementById("db");
 const saveBtn = document.getElementById("saveBtn"); // 明示的に取得
 
 // 状態
-const VERSION = "v1.1.3";
+const VERSION = "v1.1.4";
 console.log(`Prime Video 2 Note Importer ${VERSION} loaded.`);
 let currentRating = 0;
 let tags = [];
