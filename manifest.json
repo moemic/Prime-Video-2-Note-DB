@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Prime Video → Notion Importer",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "description": "Prime Videoの作品ページから情報を抜き出してNotion DBに保存します。",
   "icons": {
     "16": "icons/icon128.png",
