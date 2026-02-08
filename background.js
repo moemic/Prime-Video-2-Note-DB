@@ -63,6 +63,7 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     }
 
     // 1. ページを作成
+    console.log("Notion API Request Body:", JSON.stringify(body, null, 2));
     const res = await fetch("https://api.notion.com/v1/pages", {
         method: "POST",
         headers: {
