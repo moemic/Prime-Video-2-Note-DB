@@ -13,10 +13,9 @@ function ratingToSelectName(rating) {
 }
 
 async function createNotionPage({ notionToken, notionDbId, payload }) {
-    console.log("Full Payload received in background:", JSON.stringify(payload, null, 2));
     // 動画鑑賞リストDBのプロパティ構造
     const properties = {
-        "Name": { "title": [{ "text": { "content": `[v1.1.4] ${payload.title}` || "" } }] },
+        "Name": { "title": [{ "text": { "content": payload.title || "" } }] },
         "URL": { "url": payload.url || null },
         "概要": { "rich_text": [{ "text": { "content": payload.description || "" } }] },
         "鑑賞終了": { "checkbox": true },
@@ -64,7 +63,6 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     }
 
     // 1. ページを作成
-    console.log("Notion API Request Body:", JSON.stringify(body, null, 2));
     const res = await fetch("https://api.notion.com/v1/pages", {
         method: "POST",
         headers: {
@@ -84,7 +82,6 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
 
     // 2. コメントがあれば、Notionのコメント機能を使って投稿 (POST /v1/comments)
     if (payload.comment) {
-        console.log("Attempting to post comment to page:", newPage.id);
         const cRes = await fetch("https://api.notion.com/v1/comments", {
             method: "POST",
             headers: {
@@ -103,7 +100,6 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
             console.error("Comment API Error Response:", cError);
             throw new Error(`ページは作成されましたが、コメントの投稿に失敗しました: ${cError.message}`);
         }
-        console.log("Comment posted successfully.");
     }
 
     return newPage;
