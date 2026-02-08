@@ -32,6 +32,7 @@ let extractedData = {}; // nullからオブジェクトに変更
 let imageCandidates = []; // 新しい状態変数
 let currentImageIndex = 0; // selected image
 let slideIndex = 0; // scroll position
+let existingPageId = null; // 既存ページID
 
 // 初期化
 (async () => {
@@ -90,13 +91,30 @@ async function checkDuplicate(title) {
   try {
     const res = await chrome.runtime.sendMessage({ type: "CHECK_DUPLICATE", title });
     if (res?.ok && res.duplicate) {
+      existingPageId = res.pageId;
+      duplicateWarning.innerHTML = `⚠️ すでに登録されています。既存データを読み込みました：<a id="duplicateLink" href="${res.url}" target="_blank">Notionを開く</a>`;
+
+      // 既存データの各フィールドへの反映
+      if (res.rating !== undefined) {
+        currentRating = res.rating;
+        updateStars();
+      }
+      if (res.tags) {
+        tags = res.tags;
+        renderTags();
+      }
+      if (res.description) {
+        noteEl.value = res.description;
+      }
+
       duplicateWarning.style.display = "block";
-      duplicateLink.href = res.url;
     } else {
+      existingPageId = null;
       duplicateWarning.style.display = "none";
     }
   } catch (e) {
     console.error("重複チェックエラー:", e);
+    existingPageId = null;
     duplicateWarning.style.display = "none";
   }
 }
@@ -363,6 +381,7 @@ saveBtn.addEventListener("click", async () => {
 
   // ペイロードを構築
   const payload = {
+    pageId: existingPageId, // 既存IDがあれば含める
     title: titleEl.value.trim(),
     description: noteEl.value.trim(),
     comment: commentEl.value.trim(),
@@ -379,8 +398,10 @@ saveBtn.addEventListener("click", async () => {
     const res = await chrome.runtime.sendMessage({ type: "CREATE_NOTION_PAGE", payload });
 
     if (res?.ok) {
-      statusEl.textContent = "保存完了！";
+      statusEl.textContent = existingPageId ? "保存（更新）完了！" : "保存完了！";
       statusEl.className = "status success";
+      // 更新後のID（新規作成の場合）を保持する（連続保存対応）
+      if (res.id) existingPageId = res.id;
     } else {
       throw new Error(res?.error || "不明なエラー");
     }

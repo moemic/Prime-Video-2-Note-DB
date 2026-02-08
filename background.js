@@ -12,7 +12,23 @@ function ratingToSelectName(rating) {
     return map[rating] || null;
 }
 
+// セレクト名からレーティング番号への変換
+function selectNameToRating(name) {
+    const map = {
+        "★★★★★": 5,
+        "★★★★☆": 4,
+        "★★★☆☆": 3,
+        "★★☆☆☆": 2,
+        "★☆☆☆☆": 1
+    };
+    return map[name] || 0;
+}
+
 async function createNotionPage({ notionToken, notionDbId, payload }) {
+    const pageId = payload.pageId; // 既存IDがあれば更新
+    const method = pageId ? "PATCH" : "POST";
+    const url = pageId ? `https://api.notion.com/v1/pages/${pageId}` : "https://api.notion.com/v1/pages";
+
     // 動画鑑賞リストDBのプロパティ構造
     const properties = {
         "Name": { "title": [{ "text": { "content": payload.title || "" } }] },
@@ -23,7 +39,6 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     };
 
     // サムネイルを「カバー画像」プロパティ（Files & media）に入れる
-    // 選択された画像 + 残りの画像をすべて保存
     const allImages = [];
     if (payload.image) {
         allImages.push({ "name": "cover", "external": { "url": payload.image } });
@@ -42,6 +57,8 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         properties["ジャンル"] = {
             "multi_select": payload.tags.map(tag => ({ "name": tag }))
         };
+    } else if (pageId) {
+        properties["ジャンル"] = { "multi_select": [] };
     }
 
     // レーティングを「オススメ度」（select）に入れる
@@ -50,21 +67,24 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         if (ratingName) {
             properties["オススメ度"] = { "select": { "name": ratingName } };
         }
+    } else if (pageId) {
+        properties["オススメ度"] = { "select": null };
     }
 
     const body = {
-        parent: { database_id: notionDbId },
         properties
     };
 
-    // ページ自体のカバー画像にも設定
+    if (!pageId) {
+        body.parent = { database_id: notionDbId };
+    }
+
     if (payload.image) {
         body.cover = { type: "external", external: { url: payload.image } };
     }
 
-    // 1. ページを作成
-    const res = await fetch("https://api.notion.com/v1/pages", {
-        method: "POST",
+    const res = await fetch(url, {
+        method: method,
         headers: {
             "Authorization": `Bearer ${notionToken}`,
             "Notion-Version": NOTION_VERSION,
@@ -80,7 +100,6 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
 
     const newPage = await res.json();
 
-    // 2. コメントがあれば、Notionのコメント機能を使って投稿 (POST /v1/comments)
     if (payload.comment) {
         const cRes = await fetch("https://api.notion.com/v1/comments", {
             method: "POST",
@@ -152,8 +171,17 @@ async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
 
     const data = await res.json();
     if (data.results && data.results.length > 0) {
-        // 最初に見つかったページのURLを返す
-        return { duplicate: true, url: data.results[0].url };
+        const page = data.results[0];
+        const props = page.properties;
+        const existingData = {
+            duplicate: true,
+            pageId: page.id,
+            url: page.url,
+            rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
+            tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
+            description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : ""
+        };
+        return existingData;
     }
     return { duplicate: false };
 }
@@ -163,8 +191,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         (async () => {
             const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
             try {
-                await createNotionPage({ notionToken, notionDbId, payload: msg.payload });
-                sendResponse({ ok: true });
+                const page = await createNotionPage({ notionToken, notionDbId, payload: msg.payload });
+                sendResponse({ ok: true, id: page.id });
             } catch (e) {
                 console.error("Notion API Error:", e);
                 sendResponse({ ok: false, error: String(e.message || e) });
