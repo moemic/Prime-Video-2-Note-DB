@@ -106,6 +106,9 @@ async function checkDuplicate(title) {
       if (res.description) {
         noteEl.value = res.description;
       }
+      if (res.director) {
+        extractedData.director = res.director;
+      }
 
       duplicateWarning.style.display = "block";
     } else {
@@ -168,6 +171,9 @@ function handleExtractedMessage(data) {
   if (data.description) {
     noteEl.value = data.description;
     extractedData.description = data.description;
+  }
+  if (data.director) {
+    extractedData.director = data.director;
   }
 
   if (data.url) extractedData.url = data.url;
@@ -390,6 +396,8 @@ saveBtn.addEventListener("click", async () => {
     images: otherImages,
     tags: tags,
     rating: currentRating,
+    director: extractedData?.director || "",
+    date: new Date().toISOString().split('T')[0],
     watched: true
   };
 

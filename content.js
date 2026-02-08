@@ -263,9 +263,55 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!rawTitle) rawTitle = document.title;
     const finalTitle = cleanTitle(rawTitle);
 
+    // 監督名の抽出
+    let director = "";
+    try {
+        // LD-JSONから探す
+        const ldJsons = document.querySelectorAll('script[type="application/ld+json"]');
+        for (const script of ldJsons) {
+            try {
+                const data = JSON.parse(script.textContent);
+                if (data.director) {
+                    if (typeof data.director === 'string') director = data.director;
+                    else if (data.director.name) director = data.director.name;
+                    else if (Array.isArray(data.director)) {
+                        director = data.director.map(d => typeof d === 'string' ? d : d.name).filter(Boolean).join(", ");
+                    }
+                }
+                if (director) break;
+            } catch (e) { }
+        }
+
+        // DOMから探す（「監督」「演出」ラベル等）
+        if (!director) {
+            const labelSelectors = [
+                "._1H6ABQ", // Amazon Details Label
+                "._36v9Yk",
+                "dt",
+                "th"
+            ];
+            for (const sel of labelSelectors) {
+                const labels = document.querySelectorAll(sel);
+                for (const label of labels) {
+                    const txt = label.textContent?.trim();
+                    if (txt && (txt.includes("監督") || txt.includes("演出") || txt.includes("Director"))) {
+                        // 次の要素または親の兄弟等から値を取得
+                        const val = label.nextElementSibling?.textContent?.trim();
+                        if (val) {
+                            director = val;
+                            break;
+                        }
+                    }
+                }
+                if (director) break;
+            }
+        }
+    } catch (e) { console.error("Director extraction error", e); }
+
     sendResponse({
         title: finalTitle,
         description: pickLongest(ogDesc, getMeta("description"), domDesc),
+        director: director,
         url,
         image,
         images: finalImages,

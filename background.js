@@ -35,7 +35,9 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         "URL": { "url": payload.url || null },
         "概要": { "rich_text": [{ "text": { "content": payload.description || "" } }] },
         "鑑賞終了": { "checkbox": true },
-        "ステータス": { "select": { "name": "鑑賞終了" } }
+        "ステータス": { "select": { "name": "鑑賞終了" } },
+        "著者": { "rich_text": [{ "text": { "content": payload.director || "" } }] },
+        "日付": { "date": { "start": payload.date || new Date().toISOString().split('T')[0] } }
     };
 
     // サムネイルを「カバー画像」プロパティ（Files & media）に入れる
@@ -179,7 +181,8 @@ async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
             url: page.url,
             rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
             tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
-            description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : ""
+            description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
+            director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : ""
         };
         return existingData;
     }
