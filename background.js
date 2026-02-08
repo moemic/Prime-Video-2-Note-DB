@@ -13,6 +13,7 @@ function ratingToSelectName(rating) {
 }
 
 async function createNotionPage({ notionToken, notionDbId, payload }) {
+    console.log("Full Payload received in background:", JSON.stringify(payload, null, 2));
     // 動画鑑賞リストDBのプロパティ構造
     const properties = {
         "Name": { "title": [{ "text": { "content": payload.title || "" } }] },
@@ -83,22 +84,26 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
 
     // 2. コメントがあれば、Notionのコメント機能を使って投稿 (POST /v1/comments)
     if (payload.comment) {
-        try {
-            await fetch("https://api.notion.com/v1/comments", {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${notionToken}`,
-                    "Notion-Version": NOTION_VERSION,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    "parent": { "page_id": newPage.id },
-                    "rich_text": [{ "text": { "content": payload.comment } }]
-                })
-            });
-        } catch (e) {
-            console.error("Comment API Error:", e);
+        console.log("Attempting to post comment to page:", newPage.id);
+        const cRes = await fetch("https://api.notion.com/v1/comments", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${notionToken}`,
+                "Notion-Version": NOTION_VERSION,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                "parent": { "page_id": newPage.id },
+                "rich_text": [{ "text": { "content": payload.comment } }]
+            })
+        });
+
+        if (!cRes.ok) {
+            const cError = await cRes.json();
+            console.error("Comment API Error Response:", cError);
+            throw new Error(`ページは作成されましたが、コメントの投稿に失敗しました: ${cError.message}`);
         }
+        console.log("Comment posted successfully.");
     }
 
     return newPage;
