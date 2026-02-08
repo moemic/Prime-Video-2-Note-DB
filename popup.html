@@ -417,10 +417,12 @@
 
   <div class="field">
     <label class="field-label">Status</label>
-    <input type="text" id="statusInput" list="statusOptions" placeholder="ステータスを選択または入力" />
-    <datalist id="statusOptions">
-      <option value="鑑賞終了"></option>
-    </datalist>
+    <div class="tags-input" id="statusContainer">
+      <input type="text" id="statusInput" placeholder="入力してEnterで設定" />
+    </div>
+    <div class="suggested-tags" id="suggestedStatuses">
+      <!-- Suggested statuses injected here -->
+    </div>
   </div>
 
   <div class="rating-section">

@@ -14,7 +14,8 @@ const carouselTrack = document.getElementById("carouselTrack");
 const counterEl = document.getElementById("imgCounter");
 const suggestedTagsContainer = document.getElementById("suggestedTags");
 const statusInput = document.getElementById("statusInput");
-const statusOptions = document.getElementById("statusOptions");
+const statusContainer = document.getElementById("statusContainer");
+const suggestedStatusesContainer = document.getElementById("suggestedStatuses");
 
 
 const statusEl = document.getElementById("status");
@@ -27,9 +28,11 @@ const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
 
 // 状態
-const VERSION = "v1.9.0";
+const VERSION = "v1.10.0";
 let currentRating = 0;
 let tags = [];
+let currentStatus = "鑑賞終了"; // 初期値
+let statusOptionsData = []; // ステータス候補保持用
 let extractedData = {}; // nullからオブジェクトに変更
 let imageCandidates = []; // 新しい状態変数
 let currentImageIndex = 0; // selected image
@@ -117,7 +120,8 @@ async function checkDuplicate(title) {
         extractedData.date = res.date;
       }
       if (res.status) {
-        statusInput.value = res.status;
+        currentStatus = res.status;
+        renderStatus();
       }
 
       duplicateWarning.style.display = "block";
@@ -168,25 +172,72 @@ async function fetchNotionStatusOptions() {
     const res = await chrome.runtime.sendMessage({ type: "GET_NOTION_STATUS_OPTIONS" });
     if (res?.ok && res.options) {
       currentStatusType = res.type;
-      renderStatusOptions(res.options);
+      statusOptionsData = res.options; // データ保持
+      renderSuggestedStatuses();
+      renderStatus(); // 初期表示更新
     }
   } catch (e) {
     console.error("ステータス候補取得エラー:", e);
   }
 }
 
-function renderStatusOptions(options) {
-  const currentValue = statusInput.value;
-  statusOptions.innerHTML = '';
-  options.forEach(opt => {
-    const option = document.createElement("option");
-    option.value = opt.name;
-    statusOptions.appendChild(option);
-  });
-  // 既に値が設定されている場合は維持（重複チェック後の可能性あり）
-  if (currentValue && options.some(o => o.name === currentValue)) {
-    statusInput.value = currentValue;
+// ステータス入力欄のイベント
+statusInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && statusInput.value.trim()) {
+    e.preventDefault();
+    setStatus(statusInput.value.trim());
+    statusInput.value = "";
   }
+});
+
+function setStatus(text) {
+  currentStatus = text;
+  renderStatus();
+  renderSuggestedStatuses();
+}
+
+function removeStatus() {
+  currentStatus = "";
+  renderStatus();
+  renderSuggestedStatuses();
+}
+
+function renderStatus() {
+  // 既存のステータスチップを削除 (input以外)
+  statusContainer.querySelectorAll(".tag").forEach(el => el.remove());
+
+  if (currentStatus) {
+    const chip = document.createElement("span");
+    chip.className = "tag"; // タグと同じスタイルを使用
+    chip.innerHTML = `${currentStatus} <span class="remove">×</span>`;
+    chip.querySelector(".remove").addEventListener("click", () => removeStatus());
+    statusContainer.insertBefore(chip, statusInput);
+  }
+}
+
+function renderSuggestedStatuses() {
+  suggestedStatusesContainer.innerHTML = '';
+  statusOptionsData.forEach(opt => {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip";
+    chip.textContent = opt.name;
+
+    // 現在のステータスと一致していれば選択状態にする
+    if (currentStatus === opt.name) {
+      chip.classList.add("selected");
+    }
+
+    chip.onclick = () => {
+      if (currentStatus === opt.name) {
+        // 解除するか再選択するかだが、単一選択なので他を選ぶまで維持でもいいが、
+        // タグのUXに合わせてトグル動作（解除）もできるようにする
+        removeStatus();
+      } else {
+        setStatus(opt.name);
+      }
+    };
+    suggestedStatusesContainer.appendChild(chip);
+  });
 }
 
 // メッセージリスナー
@@ -434,7 +485,7 @@ saveBtn.addEventListener("click", async () => {
     rating: currentRating,
     director: extractedData?.director || "",
     date: extractedData?.date || new Date().toISOString().split('T')[0],
-    status: statusInput.value,
+    status: currentStatus,
     statusType: currentStatusType,
     watched: true
   };
