@@ -137,6 +137,20 @@ function cleanTitle(rawTitle) {
     return title;
 }
 
+// 画像のファイルサイズを取得する（HEADリクエスト）
+async function getImageSize(url) {
+    try {
+        const response = await fetch(url, { method: "HEAD" });
+        if (response.ok) {
+            const length = response.headers.get("Content-Length");
+            return length ? parseInt(length, 10) : 0;
+        }
+    } catch (e) {
+        // console.error("HEAD request failed for", url, e);
+    }
+    return 0;
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== "EXTRACT_PRIME") return;
 
@@ -251,70 +265,84 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     candidates.push(...jsonImages);
 
     // ---------------------------------------------------------
-    // 重複排除と高画質化
+    // 重複排除、サイズ取得、ソート
     // ---------------------------------------------------------
-    const uniqueImages = [...new Set(candidates)];
-    const highResImages = uniqueImages.map(getHighResUrl);
-    const finalImages = [...new Set(highResImages)].slice(0, 30);
-    const image = finalImages.length > 0 ? finalImages[0] : "";
+    (async () => {
+        const uniqueImages = [...new Set(candidates)];
 
-    // タイトルの決定とクリーニング
-    let rawTitle = pickLongest(ogTitle, domTitle, title);
-    if (!rawTitle) rawTitle = document.title;
-    const finalTitle = cleanTitle(rawTitle);
+        // 各画像のサイズを取得
+        const imageObjects = await Promise.all(
+            uniqueImages.map(async (url, index) => {
+                const highResUrl = getHighResUrl(url);
+                const size = await getImageSize(highResUrl);
+                return { url: highResUrl, size, originalIndex: index };
+            })
+        );
 
-    // 監督名の抽出
-    let director = "";
-    try {
-        // LD-JSONから探す
-        const ldJsons = document.querySelectorAll('script[type="application/ld+json"]');
-        for (const script of ldJsons) {
-            try {
-                const data = JSON.parse(script.textContent);
-                if (data.director) {
-                    if (typeof data.director === 'string') director = data.director;
-                    else if (data.director.name) director = data.director.name;
-                    else if (Array.isArray(data.director)) {
-                        director = data.director.map(d => typeof d === 'string' ? d : d.name).filter(Boolean).join(", ");
-                    }
-                }
-                if (director) break;
-            } catch (e) { }
-        }
+        // 重複排除（高画質化により重複する可能性があるため再度実行）
+        const seenUrls = new Set();
+        const dedupedImages = imageObjects.filter(item => {
+            if (seenUrls.has(item.url)) return false;
+            seenUrls.add(item.url);
+            return true;
+        });
 
-        // DOMから探す（「監督」「演出」ラベル等）
-        if (!director) {
-            const labelSelectors = [
-                "._1H6ABQ", // Amazon Details Label
-                "._36v9Yk",
-                "dt",
-                "th"
-            ];
-            for (const sel of labelSelectors) {
-                const labels = document.querySelectorAll(sel);
-                for (const label of labels) {
-                    const txt = label.textContent?.trim();
-                    if (txt && (txt.includes("監督") || txt.includes("演出") || txt.includes("Director"))) {
-                        // 次の要素または親の兄弟等から値を取得
-                        const val = label.nextElementSibling?.textContent?.trim();
-                        if (val) {
-                            director = val;
-                            break;
+        // ソート: 1. サイズ（大きい順）, 2. 元のインデックス（早い順）
+        dedupedImages.sort((a, b) => {
+            if (b.size !== a.size) return b.size - a.size;
+            return a.originalIndex - b.originalIndex;
+        });
+
+        const finalImages = dedupedImages.map(img => img.url).slice(0, 30);
+        const image = finalImages.length > 0 ? finalImages[0] : "";
+
+        // 監督名の抽出（既存ロジック）
+        let director = "";
+        try {
+            const ldJsons = document.querySelectorAll('script[type="application/ld+json"]');
+            for (const script of ldJsons) {
+                try {
+                    const data = JSON.parse(script.textContent);
+                    if (data.director) {
+                        if (typeof data.director === 'string') director = data.director;
+                        else if (data.director.name) director = data.director.name;
+                        else if (Array.isArray(data.director)) {
+                            director = data.director.map(d => typeof d === 'string' ? d : d.name).filter(Boolean).join(", ");
                         }
                     }
-                }
-                if (director) break;
+                    if (director) break;
+                } catch (e) { }
             }
-        }
-    } catch (e) { console.error("Director extraction error", e); }
 
-    sendResponse({
-        title: finalTitle,
-        description: pickLongest(ogDesc, getMeta("description"), domDesc),
-        director: director,
-        url,
-        image,
-        images: finalImages,
-        watched: true
-    });
+            if (!director) {
+                const labelSelectors = ["._1H6ABQ", "._36v9Yk", "dt", "th"];
+                for (const sel of labelSelectors) {
+                    const labels = document.querySelectorAll(sel);
+                    for (const label of labels) {
+                        const txt = label.textContent?.trim();
+                        if (txt && (txt.includes("監督") || txt.includes("演出") || txt.includes("Director"))) {
+                            const val = label.nextElementSibling?.textContent?.trim();
+                            if (val) {
+                                director = val;
+                                break;
+                            }
+                        }
+                    }
+                    if (director) break;
+                }
+            }
+        } catch (e) { console.error("Director extraction error", e); }
+
+        sendResponse({
+            title: finalTitle,
+            description: pickLongest(ogDesc, getMeta("description"), domDesc),
+            director: director,
+            url,
+            image,
+            images: finalImages,
+            watched: true
+        });
+    })();
+
+    return true; // 非同期レスポンスのために true を返す
 });

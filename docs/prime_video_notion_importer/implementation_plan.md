@@ -1,39 +1,30 @@
-# 監督名と登録日の追加機能の実装計画
+# サムネイル画像のサイズ順ソート実装計画
 
-Prime Videoのページから監督名を抽出し、Notionデータベースの「著者」プロパティに保存します。また、登録した日付を「日付」プロパティに自動設定します。
+抽出された画像候補を取得順ではなく、ファイルサイズ（容量）が大きいもの（＝高画質なもの）から優先的に表示するように変更します。
 
 ## 変更内容
 
 ### [Component] Content Extraction (content.js)
 
 #### [MODIFY] [content.js](file:///Users/takahiro/Library/Mobile%20Documents/iCloud~md~obsidian/Documents/Projects/chrome%E6%8B%A1%E5%BC%B5%E6%A9%9F%E8%83%BD%20-%20Prime%20Video%202%20Note%E3%82%A4%E3%83%B3%E3%83%9D%E3%83%BC%E3%82%BF%E3%83%BC/content.js)
-- `director` (監督名) の抽出ロジックを追加.
-  - LD-JSONの `director` フィールドから取得.
-  - DOM（「監督」「演出」等のラベルを持つ要素の隣）から取得するフォールバックを追加.
-- メッセージ返却データに `director` を追加.
-
----
-
-### [Component] Popup Logic (popup.js)
-
-#### [MODIFY] [popup.js](file:///Users/takahiro/Library/Mobile%20Documents/iCloud~md~obsidian/Documents/Projects/chrome%E6%8B%A1%E5%BC%B5%E6%A9%9F%E8%83%BD%20-%20Prime%20Video%202%20Note%E3%82%A4%E3%83%B3%E3%83%9D%E3%83%BC%E3%82%BF%E3%83%BC/popup.js)
-- `extractedData` に `director` を保持するように修正.
-- 保存ボタン押下時に `date`（今日の日付：YYYY-MM-DD形式）をペイロードに含める.
-- 重複チェック時に既存の「著者」情報があれば読み込むように修正.
+- `getImageSize(url)` ヘルパー関数を追加.
+  - `fetch(url, { method: "HEAD" })` を使用して `Content-Length` を取得します.
+- メッセージハンドラーのソートロジックを更新.
+  - `Promise.all` を使用して、抽出された全画像候補のサイズを並列で取得します.
+  - **第1キー**: ファイルサイズ（降順）
+  - **第2キー**: 発見順（昇順 / 安定ソート）
+  - この順序でソートした後の上位30件をポップアップに返します.
 
 ---
 
 ### [Component] Notion API Integration (background.js)
-
-#### [MODIFY] [background.js](file:///Users/takahiro/Library/Mobile%20Documents/iCloud~md~obsidian/Documents/Projects/chrome%E6%8B%A1%E5%BC%B5%E6%A9%9F%E8%83%BD%20-%20Prime%20Video%202%20Note%E3%82%A4%E3%83%B3%E3%83%9D%E3%83%BC%E3%82%BF%E3%83%BC/background.js)
-- `properties` に「著者」（rich_text）と「日付」（date）を追加.
-- `checkDuplicateTitle` で既存の「著者」プロパティを読み込む処理を追加.
+- 変更なし.
 
 ---
 
 ## 検証計画
 
 ### 手動検証
-1. Prime Videoの作品ページを開き、ポップアップを起動.
-2. 保存後にNotionデータベースを確認し、「著者」欄に監督名、「日付」欄に今日の日付が入っていることを確認.
-3. すでに登録済みの作品の場合、既存の監督名がポップアップ内で（内部的に）保持され、更新時も維持されることを確認.
+1. Prime Videoの作品ページを開き、ポップアップを起動します.
+2. 表示される画像の最初の数枚が、解像度の低いアイコン等ではなく、ポスター画像やヒーロー画像（高画質なもの）になっていることを確認します.
+3. デベロッパーツールのネットワークタブで、HEADリクエストが正しく並列実行されていることを確認します.
