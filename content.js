@@ -151,10 +151,34 @@ async function getImageSize(url) {
     return 0;
 }
 
+// URLからASINまたはGTI（Amazon固有の作品ID）を抽出する
+function extractAsin(url) {
+    if (!url) return "";
+    // パターン1: /dp/BXXXXXXXXX 形式
+    const dpMatch = url.match(/\/dp\/([A-Z0-9]{10})/);
+    if (dpMatch) return dpMatch[1];
+    // パターン2: /detail/BXXXXXXXXX 形式
+    const detailMatch = url.match(/\/detail\/([A-Z0-9]{10})/);
+    if (detailMatch) return detailMatch[1];
+    try {
+        const urlObj = new URL(url);
+        // パターン3: ?asin=BXXXXXXXXX 形式
+        const asinParam = urlObj.searchParams.get("asin");
+        if (asinParam && /^[A-Z0-9]{10}$/.test(asinParam)) return asinParam;
+        // パターン4: ?gti=amzn1.dv.gti.XXXXX 形式（GTIをフォールバックIDとして使用）
+        const gti = urlObj.searchParams.get("gti");
+        if (gti && gti.startsWith("amzn1.dv.gti.")) return gti;
+    } catch (e) {
+        // URL解析失敗時は無視
+    }
+    return "";
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== "EXTRACT_PRIME") return;
 
     const url = location.href;
+    const asin = extractAsin(url);
 
     // 1. Basic Metadata
     const ogImage = getMeta("og:image");
@@ -342,6 +366,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             title: finalTitle,
             description: pickLongest(ogDesc, getMeta("description"), domDesc),
             director: director,
+            asin: asin,
             url,
             image,
             images: finalImages,

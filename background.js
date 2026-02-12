@@ -39,6 +39,11 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         "日付": { "date": { "start": payload.date || new Date().toISOString().split('T')[0] } }
     };
 
+    // ASINを保存（作品固有の管理番号）
+    if (payload.asin) {
+        properties["ASIN"] = { "rich_text": [{ "text": { "content": payload.asin } }] };
+    }
+
     // ステータスの設定（status型またはselect型に対応）
     // payload.statusType が渡されていればそれに従い、なければデフォルトで status を試す
     const statusVal = payload.status || "鑑賞終了";
@@ -193,7 +198,24 @@ async function getNotionStatusOptions({ notionToken, notionDbId }) {
     return { type: "status", options: [] };
 }
 
-async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
+function buildExistingData(page) {
+    const props = page.properties;
+    return {
+        duplicate: true,
+        pageId: page.id,
+        url: page.url,
+        rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
+        tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
+        description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
+        director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : "",
+        date: props["日付"]?.date ? props["日付"].date.start : "",
+        status: props["ステータス"]?.status ? props["ステータス"].status.name : (props["ステータス"]?.select ? props["ステータス"].select.name : ""),
+        hasCover: !!page.cover,
+        existingFiles: props["カバー画像"]?.files || []
+    };
+}
+
+async function queryNotionDatabase({ notionToken, notionDbId, filter }) {
     const res = await fetch(`https://api.notion.com/v1/databases/${notionDbId}/query`, {
         method: "POST",
         headers: {
@@ -201,14 +223,7 @@ async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
             "Notion-Version": NOTION_VERSION,
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-            filter: {
-                property: "Name",
-                title: {
-                    equals: title
-                }
-            }
-        })
+        body: JSON.stringify({ filter })
     });
 
     if (!res.ok) {
@@ -216,25 +231,47 @@ async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
         throw new Error(errorData.message || `${res.status} ${res.statusText}`);
     }
 
-    const data = await res.json();
-    if (data.results && data.results.length > 0) {
-        const page = data.results[0];
-        const props = page.properties;
-        const existingData = {
-            duplicate: true,
-            pageId: page.id,
-            url: page.url,
-            rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
-            tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
-            description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
-            director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : "",
-            date: props["日付"]?.date ? props["日付"].date.start : "",
-            status: props["ステータス"]?.status ? props["ステータス"].status.name : (props["ステータス"]?.select ? props["ステータス"].select.name : ""),
-            hasCover: !!page.cover,
-            existingFiles: props["カバー画像"]?.files || []
-        };
-        return existingData;
+    return res.json();
+}
+
+async function checkDuplicateByAsin({ notionToken, notionDbId, asin, title }) {
+    // 1. ASINで照合（優先）
+    if (asin) {
+        try {
+            const data = await queryNotionDatabase({
+                notionToken, notionDbId,
+                filter: {
+                    property: "ASIN",
+                    rich_text: { equals: asin }
+                }
+            });
+            if (data.results && data.results.length > 0) {
+                return buildExistingData(data.results[0]);
+            }
+        } catch (e) {
+            // ASINプロパティが存在しない場合（validation_error）のみフォールバック
+            if (e.message && (e.message.includes("property") || e.message.includes("validation"))) {
+                console.warn("ASIN property not found, falling back to title:", e.message);
+            } else {
+                throw e;
+            }
+        }
     }
+
+    // 2. タイトルで照合（フォールバック）
+    if (title) {
+        const data = await queryNotionDatabase({
+            notionToken, notionDbId,
+            filter: {
+                property: "Name",
+                title: { equals: title }
+            }
+        });
+        if (data.results && data.results.length > 0) {
+            return buildExistingData(data.results[0]);
+        }
+    }
+
     return { duplicate: false };
 }
 
@@ -279,7 +316,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 return;
             }
             try {
-                const result = await checkDuplicateTitle({ notionToken, notionDbId, title: msg.title });
+                const result = await checkDuplicateByAsin({ notionToken, notionDbId, asin: msg.asin, title: msg.title });
                 sendResponse({ ok: true, ...result });
             } catch (e) {
                 console.error("Duplicate Check Error:", e);

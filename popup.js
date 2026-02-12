@@ -28,7 +28,7 @@ const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
 
 // 状態
-const VERSION = "v1.11.0";
+const VERSION = "v1.12.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = "鑑賞終了"; // 初期値
@@ -41,6 +41,7 @@ let existingPageId = null; // 既存ページID
 let currentStatusType = "status"; // Notion側のプロパティ型保持用
 let hasCover = false; // 既存カバーの有無
 let existingFiles = []; // 既存のファイルリスト
+let currentAsin = ""; // 作品固有のASIN
 
 // 初期化
 (async () => {
@@ -97,7 +98,7 @@ let existingFiles = []; // 既存のファイルリスト
 
 async function checkDuplicate(title) {
   try {
-    const res = await chrome.runtime.sendMessage({ type: "CHECK_DUPLICATE", title });
+    const res = await chrome.runtime.sendMessage({ type: "CHECK_DUPLICATE", asin: currentAsin, title });
     if (res?.ok && res.duplicate) {
       existingPageId = res.pageId;
       duplicateWarning.innerHTML = `⚠️ すでに登録されています。既存データを読み込みました：<a id="duplicateLink" href="${res.url}" target="_blank">Notionを開く</a>`;
@@ -254,10 +255,14 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 // データ処理ハンドラ
 function handleExtractedMessage(data) {
+  if (data.asin) {
+    currentAsin = data.asin;
+    extractedData.asin = data.asin;
+  }
   if (data.title) {
     titleEl.value = data.title;
     extractedData.title = data.title;
-    // 重複チェック実行
+    // 重複チェック実行（ASINがあればASIN優先）
     checkDuplicate(data.title);
   }
   if (data.description) {
@@ -484,6 +489,7 @@ saveBtn.addEventListener("click", async () => {
     description: noteEl.value.trim(),
     comment: commentEl.value.trim(),
     url: extractedData?.url || "",
+    asin: currentAsin,
     image: coverImage,
     images: otherImages,
     tags: tags,
