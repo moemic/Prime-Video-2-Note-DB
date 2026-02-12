@@ -46,13 +46,26 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     properties["ステータス"] = { [statusType]: { "name": statusVal } };
 
     // サムネイルを「カバー画像」プロパティ（Files & media）に入れる
-    const allImages = [];
+    let allImages = [];
+
+    // 既存のファイルリストがあればそれをベースにする
+    if (payload.existingFiles && Array.isArray(payload.existingFiles)) {
+        allImages = [...payload.existingFiles];
+    }
+
     if (payload.image) {
-        allImages.push({ "name": "cover", "external": { "url": payload.image } });
+        // すでに同じURLが登録されていないか確認（簡易的な重複排除）
+        const isAlreadyAdded = allImages.some(f => f.external?.url === payload.image);
+        if (!isAlreadyAdded) {
+            allImages.push({ "name": "cover", "external": { "url": payload.image } });
+        }
     }
     if (payload.images && payload.images.length > 0) {
         payload.images.forEach((url, i) => {
-            allImages.push({ "name": `image_${i + 1}`, "external": { "url": url } });
+            const isAlreadyAdded = allImages.some(f => f.external?.url === url);
+            if (!isAlreadyAdded) {
+                allImages.push({ "name": `image_${Date.now()}_${i}`, "external": { "url": url } });
+            }
         });
     }
     if (allImages.length > 0) {
@@ -86,7 +99,8 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         body.parent = { database_id: notionDbId };
     }
 
-    if (payload.image) {
+    // 既存カバーがない場合、または新規作成の場合のみカバーを設定する
+    if (payload.image && (!payload.hasCover || !pageId)) {
         body.cover = { type: "external", external: { url: payload.image } };
     }
 
@@ -215,7 +229,9 @@ async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
             description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
             director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : "",
             date: props["日付"]?.date ? props["日付"].date.start : "",
-            status: props["ステータス"]?.status ? props["ステータス"].status.name : (props["ステータス"]?.select ? props["ステータス"].select.name : "")
+            status: props["ステータス"]?.status ? props["ステータス"].status.name : (props["ステータス"]?.select ? props["ステータス"].select.name : ""),
+            hasCover: !!page.cover,
+            existingFiles: props["カバー画像"]?.files || []
         };
         return existingData;
     }

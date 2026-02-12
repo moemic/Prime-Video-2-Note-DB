@@ -39,6 +39,8 @@ let currentImageIndex = 0; // selected image
 let slideIndex = 0; // scroll position
 let existingPageId = null; // 既存ページID
 let currentStatusType = "status"; // Notion側のプロパティ型保持用
+let hasCover = false; // 既存カバーの有無
+let existingFiles = []; // 既存のファイルリスト
 
 // 初期化
 (async () => {
@@ -124,9 +126,13 @@ async function checkDuplicate(title) {
       }
 
       duplicateWarning.style.display = "block";
+      hasCover = res.hasCover || false;
+      existingFiles = res.existingFiles || [];
     } else {
       existingPageId = null;
       duplicateWarning.style.display = "none";
+      hasCover = false;
+      existingFiles = [];
     }
   } catch (e) {
     console.error("重複チェックエラー:", e);
@@ -486,6 +492,8 @@ saveBtn.addEventListener("click", async () => {
     date: extractedData?.date || new Date().toISOString().split('T')[0],
     status: currentStatus,
     statusType: currentStatusType,
+    hasCover: hasCover,
+    existingFiles: existingFiles,
     watched: true
   };
 
