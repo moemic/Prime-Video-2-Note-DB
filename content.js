@@ -158,14 +158,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // 1. Basic Metadata
     const ogTitle = getMeta("og:title");
     const ogDesc = getMeta("og:description");
-    const title = getMeta("title");
+    const metaTitle = getMeta("title");
 
+    // DOM上の作品名要素（data-automation-id="title" が最も信頼性が高い）
     const domTitle = tryDomText([
         "h1[data-automation-id='title']",
-        "h1",
         "[data-testid='title']",
         ".dv-node-dp-title h1",
-        "._2I63_X"
+        "h1"
     ]);
 
     const domDesc = tryDomText([
@@ -195,8 +195,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // ---------------------------------------------------------
     (async () => {
         // タイトルの決定とクリーニング
-        let rawTitle = pickLongest(ogTitle, domTitle, title);
-        if (!rawTitle) rawTitle = document.title;
+        // DOM要素（data-automation-id="title"等）が最も信頼性が高いため最優先
+        // meta titleやdocument.titleにはキャッチコピーが入ることがある
+        let rawTitle = domTitle || ogTitle || metaTitle || document.title;
         const finalTitle = cleanTitle(rawTitle);
 
         const uniqueImages = [...new Set(candidates)];
