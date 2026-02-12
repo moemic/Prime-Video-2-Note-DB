@@ -38,9 +38,11 @@ function tryDomImage(selectors) {
     return "";
 }
 
-// JSONデータから高画質画像を抽出する（最強ロジック）
+// JSONデータから高画質画像を抽出する
+// packshot（キービジュアル）を最優先候補として分離して返す
 function tryJsonMetadata() {
     const images = [];
+    let packshot = "";
     try {
         // 1. LD-JSONから取得
         const ldJsons = document.querySelectorAll('script[type="application/ld+json"]');
@@ -62,7 +64,7 @@ function tryJsonMetadata() {
             if (matches) images.push(...matches);
         }
 
-        // 3. 他のscript内のJSONライクな構造からpackshotを探す
+        // 3. script内のJSONからpackshot（キービジュアル）を最優先で抽出
         const scripts = document.querySelectorAll('script');
         scripts.forEach(script => {
             const content = script.textContent;
@@ -71,7 +73,10 @@ function tryJsonMetadata() {
                 if (packshotMatches) {
                     packshotMatches.forEach(m => {
                         const url = m.match(/https?:\/\/[^"]+/);
-                        if (url) images.push(url[0]);
+                        if (url && isValidImage(url[0])) {
+                            if (!packshot) packshot = url[0];
+                            images.push(url[0]);
+                        }
                     });
                 }
             }
@@ -79,7 +84,7 @@ function tryJsonMetadata() {
     } catch (e) {
         console.error("JSON Parse Error", e);
     }
-    return images.filter(isValidImage);
+    return { images: images.filter(isValidImage), packshot };
 }
 
 // 背景画像を抽出する（グラデーション対応）
@@ -285,8 +290,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
     // D. Metadata & JSON
     if (isValidImage(ogImage)) candidates.push(ogImage);
-    const jsonImages = tryJsonMetadata();
-    candidates.push(...jsonImages);
+    const jsonResult = tryJsonMetadata();
+    candidates.push(...jsonResult.images);
+    const packshotUrl = jsonResult.packshot; // キービジュアル（最優先）
 
     // ---------------------------------------------------------
     // 重複排除、サイズ取得、ソート
@@ -322,7 +328,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             return a.originalIndex - b.originalIndex;
         });
 
-        const finalImages = dedupedImages.map(img => img.url).slice(0, 30);
+        let finalImages = dedupedImages.map(img => img.url).slice(0, 30);
+
+        // packshot（キービジュアル）があれば先頭に配置
+        // サイズ取得の成否に関わらず、packshotを最優先にする
+        if (packshotUrl) {
+            finalImages = finalImages.filter(url => url !== packshotUrl);
+            finalImages.unshift(packshotUrl);
+        }
+
         const image = finalImages.length > 0 ? finalImages[0] : "";
 
         // 監督名の抽出（既存ロジック）
