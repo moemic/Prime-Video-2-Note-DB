@@ -276,28 +276,32 @@ async function checkDuplicateByAsin({ notionToken, notionDbId, asin, title }) {
             }
         });
         if (data.results && data.results.length > 0) {
+            const existingAsin = data.results[0].properties["ASIN"]?.rich_text?.map(t => t.plain_text).join("") || "";
+
+            // 両方にASINがあり、かつ異なる場合は別作品（シーズン違い等）
+            if (asin && existingAsin && asin !== existingAsin) {
+                return { duplicate: false };
+            }
+
             const result = buildExistingData(data.results[0]);
             // タイトルで見つかった既存ページにASINが未設定なら補完する
-            if (asin && result.pageId) {
-                const existingAsin = data.results[0].properties["ASIN"]?.rich_text?.map(t => t.plain_text).join("") || "";
-                if (!existingAsin) {
-                    try {
-                        await fetch(`https://api.notion.com/v1/pages/${result.pageId}`, {
-                            method: "PATCH",
-                            headers: {
-                                "Authorization": `Bearer ${notionToken}`,
-                                "Notion-Version": NOTION_VERSION,
-                                "Content-Type": "application/json"
-                            },
-                            body: JSON.stringify({
-                                properties: {
-                                    "ASIN": { "rich_text": [{ "text": { "content": asin } }] }
-                                }
-                            })
-                        });
-                    } catch (e) {
-                        console.warn("ASIN auto-fill failed:", e.message);
-                    }
+            if (asin && result.pageId && !existingAsin) {
+                try {
+                    await fetch(`https://api.notion.com/v1/pages/${result.pageId}`, {
+                        method: "PATCH",
+                        headers: {
+                            "Authorization": `Bearer ${notionToken}`,
+                            "Notion-Version": NOTION_VERSION,
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            properties: {
+                                "ASIN": { "rich_text": [{ "text": { "content": asin } }] }
+                            }
+                        })
+                    });
+                } catch (e) {
+                    console.warn("ASIN auto-fill failed:", e.message);
                 }
             }
             return result;

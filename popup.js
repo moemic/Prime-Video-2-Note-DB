@@ -29,7 +29,7 @@ const duplicateLink = document.getElementById("duplicateLink");
 const overwriteCoverEl = document.getElementById("overwriteCover");
 
 // 状態
-const VERSION = "v1.18.0";
+const VERSION = "v1.19.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = "鑑賞終了"; // 初期値
