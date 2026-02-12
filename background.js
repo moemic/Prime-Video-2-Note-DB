@@ -261,7 +261,7 @@ async function checkDuplicateByAsin({ notionToken, notionDbId, asin, title }) {
         }
     }
 
-    // 2. タイトルで照合（フォールバック）
+    // 2. タイトルで照合（フォールバック: ASINが空の既存レコード用）
     if (title) {
         const data = await queryNotionDatabase({
             notionToken, notionDbId,
@@ -271,7 +271,31 @@ async function checkDuplicateByAsin({ notionToken, notionDbId, asin, title }) {
             }
         });
         if (data.results && data.results.length > 0) {
-            return buildExistingData(data.results[0]);
+            const result = buildExistingData(data.results[0]);
+            // タイトルで見つかった既存ページにASINが未設定なら補完する
+            if (asin && result.pageId) {
+                const existingAsin = data.results[0].properties["ASIN"]?.rich_text?.map(t => t.plain_text).join("") || "";
+                if (!existingAsin) {
+                    try {
+                        await fetch(`https://api.notion.com/v1/pages/${result.pageId}`, {
+                            method: "PATCH",
+                            headers: {
+                                "Authorization": `Bearer ${notionToken}`,
+                                "Notion-Version": NOTION_VERSION,
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({
+                                properties: {
+                                    "ASIN": { "rich_text": [{ "text": { "content": asin } }] }
+                                }
+                            })
+                        });
+                    } catch (e) {
+                        console.warn("ASIN auto-fill failed:", e.message);
+                    }
+                }
+            }
+            return result;
         }
     }
 

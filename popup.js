@@ -29,7 +29,7 @@ const duplicateLink = document.getElementById("duplicateLink");
 const overwriteCoverEl = document.getElementById("overwriteCover");
 
 // 状態
-const VERSION = "v1.15.0";
+const VERSION = "v1.16.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = "鑑賞終了"; // 初期値
@@ -102,7 +102,16 @@ async function checkDuplicate(title) {
     const res = await chrome.runtime.sendMessage({ type: "CHECK_DUPLICATE", asin: currentAsin, title });
     if (res?.ok && res.duplicate) {
       existingPageId = res.pageId;
-      duplicateWarning.innerHTML = `⚠️ すでに登録されています。既存データを読み込みました：<a id="duplicateLink" href="${res.url}" target="_blank">Notionを開く</a>`;
+      // チェックボックスを残しつつテキスト部分のみ更新
+      const linkEl = duplicateWarning.querySelector("#duplicateLink");
+      if (linkEl) {
+        linkEl.href = res.url;
+      }
+      // テキストノードを更新（先頭のテキストのみ）
+      const textNode = duplicateWarning.firstChild;
+      if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+        textNode.textContent = "⚠️ すでに登録されています：";
+      }
 
       // 既存データの各フィールドへの反映
       if (res.rating !== undefined) {
