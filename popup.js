@@ -26,9 +26,10 @@ const dbEl = document.getElementById("db");
 const saveBtn = document.getElementById("saveBtn"); // 明示的に取得
 const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
+const overwriteCoverEl = document.getElementById("overwriteCover");
 
 // 状態
-const VERSION = "v1.13.0";
+const VERSION = "v1.14.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = "鑑賞終了"; // 初期値
@@ -499,6 +500,7 @@ saveBtn.addEventListener("click", async () => {
     status: currentStatus,
     statusType: currentStatusType,
     hasCover: hasCover,
+    overwriteCover: overwriteCoverEl.checked,
     existingFiles: existingFiles,
     watched: true
   };

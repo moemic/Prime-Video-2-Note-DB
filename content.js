@@ -38,8 +38,8 @@ function tryDomImage(selectors) {
     return "";
 }
 
-// JSONデータから高画質画像を抽出する
-// packshot（キービジュアル）を最優先候補として分離して返す
+// JSONデータからpackshot（キービジュアル）とheroshot（バナー画像）を抽出する
+// covershot（エピソードサムネイル）は対象外
 function tryJsonMetadata() {
     const images = [];
     let packshot = "";
@@ -64,17 +64,33 @@ function tryJsonMetadata() {
             if (matches) images.push(...matches);
         }
 
-        // 3. script内のJSONからpackshot（キービジュアル）を最優先で抽出
+        // 3. script内のJSONからpackshotとheroshotのみを抽出
         const scripts = document.querySelectorAll('script');
         scripts.forEach(script => {
             const content = script.textContent;
-            if (content && content.includes('packshot')) {
+            if (!content || content.length < 100) return;
+
+            // packshot（キービジュアル）- 最優先
+            if (content.includes('packshot')) {
                 const packshotMatches = content.match(/"packshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
                 if (packshotMatches) {
                     packshotMatches.forEach(m => {
                         const url = m.match(/https?:\/\/[^"]+/);
                         if (url && isValidImage(url[0])) {
                             if (!packshot) packshot = url[0];
+                            images.push(url[0]);
+                        }
+                    });
+                }
+            }
+
+            // heroshot（バナー画像）
+            if (content.includes('heroshot')) {
+                const heroMatches = content.match(/"heroshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
+                if (heroMatches) {
+                    heroMatches.forEach(m => {
+                        const url = m.match(/https?:\/\/[^"]+/);
+                        if (url && isValidImage(url[0])) {
                             images.push(url[0]);
                         }
                     });

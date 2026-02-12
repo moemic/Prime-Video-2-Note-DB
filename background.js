@@ -104,8 +104,11 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         body.parent = { database_id: notionDbId };
     }
 
-    // 既存カバーがない場合、または新規作成の場合のみカバーを設定する
-    if (payload.image && (!payload.hasCover || !pageId)) {
+    // カバー画像の設定条件:
+    // 1. 新規作成の場合は常にセット
+    // 2. 既存ページでカバーがない場合はセット
+    // 3. 既存ページでもoverwriteCoverがtrueならセット（上書き）
+    if (payload.image && (!pageId || !payload.hasCover || payload.overwriteCover)) {
         body.cover = { type: "external", external: { url: payload.image } };
     }
 

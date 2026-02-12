@@ -325,6 +325,21 @@
       font-weight: 500;
     }
 
+    .overwrite-cover-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      color: #ccc;
+    }
+
+    .overwrite-cover-label input[type="checkbox"] {
+      accent-color: #4db8ff;
+      cursor: pointer;
+    }
+
     .status {
       text-align: center;
       font-size: 12px;
@@ -402,6 +417,10 @@
     <input type="text" id="title" placeholder="作品タイトル" />
     <div id="duplicateWarning" class="duplicate-warning">
       ⚠️ すでに登録されています：<a id="duplicateLink" target="_blank">Notionを開く</a>
+      <label id="overwriteCoverLabel" class="overwrite-cover-label">
+        <input type="checkbox" id="overwriteCover" />
+        カバー画像を上書きする
+      </label>
     </div>
   </div>
 
@@ -464,7 +483,7 @@
       <label class="field-label">Database ID</label>
       <input type="text" id="db" placeholder="d419b59d..." />
     </div>
-    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.2.0</div>
+    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.14.0</div>
   </div>
 
   <script src="popup.js"></script>
