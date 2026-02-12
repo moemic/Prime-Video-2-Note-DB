@@ -21,60 +21,35 @@ function tryDomText(selectors) {
     return "";
 }
 
-function tryDomImage(selectors) {
-    for (const sel of selectors) {
-        const el = document.querySelector(sel);
-        if (!el) continue;
-
-        const srcset = el.getAttribute("srcset");
-        if (srcset) {
-            const parts = srcset.split(",").map(s => s.trim().split(" ")[0]);
-            return parts[parts.length - 1];
-        }
-
-        const src = el.getAttribute("src") || el.getAttribute("data-src") || "";
-        if (src && src.startsWith("http")) return src;
-    }
-    return "";
-}
-
-// JSONデータからpackshot（キービジュアル）とheroshot（バナー画像）を抽出する
-// covershot（エピソードサムネイル）は対象外
-function tryJsonMetadata() {
+// JSONデータからtitleshot・packshot・heroshotのみを抽出する
+// covershot（エピソードサムネイル）やその他の画像は対象外
+function extractTargetImages() {
     const images = [];
     let packshot = "";
     try {
-        // 1. LD-JSONから取得
-        const ldJsons = document.querySelectorAll('script[type="application/ld+json"]');
-        ldJsons.forEach(script => {
-            try {
-                const data = JSON.parse(script.textContent);
-                if (data.image) {
-                    if (typeof data.image === 'string') images.push(data.image);
-                    else if (data.image.url) images.push(data.image.url);
-                    else if (Array.isArray(data.image)) images.push(...data.image);
-                }
-            } catch (e) { }
-        });
-
-        // 2. dv-web-store-template (Amazon特有のデータ) から取得
-        const storeTemplate = document.getElementById("dv-web-store-template");
-        if (storeTemplate) {
-            const matches = storeTemplate.textContent.match(/https?:\/\/[^"']+\.media-amazon\.com\/images\/I\/[a-zA-Z0-9\-\._\+]+(?:\.jpg|\.png)/g);
-            if (matches) images.push(...matches);
-        }
-
-        // 3. script内のJSONからpackshotとheroshotのみを抽出
         const scripts = document.querySelectorAll('script');
         scripts.forEach(script => {
             const content = script.textContent;
             if (!content || content.length < 100) return;
 
+            // titleshot（タイトル画像）
+            if (content.includes('titleshot')) {
+                const matches = content.match(/"titleshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
+                if (matches) {
+                    matches.forEach(m => {
+                        const url = m.match(/https?:\/\/[^"]+/);
+                        if (url && isValidImage(url[0])) {
+                            images.push(url[0]);
+                        }
+                    });
+                }
+            }
+
             // packshot（キービジュアル）- 最優先
             if (content.includes('packshot')) {
-                const packshotMatches = content.match(/"packshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
-                if (packshotMatches) {
-                    packshotMatches.forEach(m => {
+                const matches = content.match(/"packshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
+                if (matches) {
+                    matches.forEach(m => {
                         const url = m.match(/https?:\/\/[^"]+/);
                         if (url && isValidImage(url[0])) {
                             if (!packshot) packshot = url[0];
@@ -86,9 +61,9 @@ function tryJsonMetadata() {
 
             // heroshot（バナー画像）
             if (content.includes('heroshot')) {
-                const heroMatches = content.match(/"heroshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
-                if (heroMatches) {
-                    heroMatches.forEach(m => {
+                const matches = content.match(/"heroshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
+                if (matches) {
+                    matches.forEach(m => {
                         const url = m.match(/https?:\/\/[^"]+/);
                         if (url && isValidImage(url[0])) {
                             images.push(url[0]);
@@ -98,30 +73,9 @@ function tryJsonMetadata() {
             }
         });
     } catch (e) {
-        console.error("JSON Parse Error", e);
+        console.error("Image extraction error", e);
     }
     return { images: images.filter(isValidImage), packshot };
-}
-
-// 背景画像を抽出する（グラデーション対応）
-function tryBackgroundImage(selectors) {
-    for (const sel of selectors) {
-        const el = document.querySelector(sel);
-        if (!el) {
-            continue;
-        }
-
-        const style = window.getComputedStyle(el);
-        const bg = style.backgroundImage;
-
-        if (bg && bg.includes('url(')) {
-            const matches = bg.match(/url\(["']?(https?:\/\/[^"']+)["']?\)/);
-            if (matches && matches[1]) {
-                return matches[1];
-            }
-        }
-    }
-    return "";
 }
 
 function isValidImage(url) {
@@ -202,7 +156,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const asin = extractAsin(url);
 
     // 1. Basic Metadata
-    const ogImage = getMeta("og:image");
     const ogTitle = getMeta("og:title");
     const ogDesc = getMeta("og:description");
     const title = getMeta("title");
@@ -225,90 +178,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     ]);
 
     // ---------------------------------------------------------
-    // 画像候補の収集 (All Candidates Strategy)
+    // 画像候補の収集 (titleshot / packshot / heroshot のみ)
     // ---------------------------------------------------------
-    const candidates = [];
+    const targetImages = extractTargetImages();
+    const candidates = [...targetImages.images];
+    const packshotUrl = targetImages.packshot; // キービジュアル（最優先）
 
-    // A. Visual Extraction (画面上の有力な画像をすべて取得)
-    try {
-        // imgタグ
-        const imgs = document.querySelectorAll('img');
-        for (const img of imgs) {
-            const rect = img.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0 || img.style.display === 'none' || img.style.visibility === 'hidden') continue;
-
-            const area = rect.width * rect.height;
-            // 極端に小さい画像は無視 (アイコン等)
-            if (area > 5000) {
-                const src = img.currentSrc || img.src;
-                if (src && isValidImage(src)) candidates.push(src);
-            }
-        }
-
-        // 背景画像
-        const bgCandidates = document.querySelectorAll('div, section, header, a, span');
-        for (const el of bgCandidates) {
-            const rect = el.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) continue;
-
-            const area = rect.width * rect.height;
-            if (area < 10000) continue;
-
-            const style = window.getComputedStyle(el);
-            const bg = style.backgroundImage;
-
-            if (bg && bg.includes('url(')) {
-                const matches = bg.match(/url\(["']?(https?:\/\/[^"']+)["']?\)/);
-                if (matches && matches[1] && isValidImage(matches[1])) {
-                    candidates.push(matches[1]);
-                }
-            }
-        }
-    } catch (e) { console.error("Visual extraction error", e); }
-
-    // B. Resource Timing API
-    try {
-        const resources = performance.getEntriesByType("resource");
-        const amazonImages = resources
-            .filter(r => r.initiatorType === 'img' || r.name.match(/\.(jpg|png|webp)(\?.*)?$/i))
-            .map(r => r.name)
-            .filter(url =>
-                url.match(/https?:\/\/(?:images-na\.ssl-images-amazon\.com|m\.media-amazon\.com)\/images\/I\/[a-zA-Z0-9\-\._\+]+(?:\.jpg|\.png)/) &&
-                isValidImage(url)
-            );
-        candidates.push(...amazonImages);
-    } catch (e) {
-        console.error("Resource Timing error", e);
+    // フォールバック: script内に対象画像がなかった場合のみ og:image を使用
+    if (candidates.length === 0) {
+        const ogImage_ = getMeta("og:image");
+        if (ogImage_ && isValidImage(ogImage_)) candidates.push(ogImage_);
     }
-
-    // C. Script Regex (Hidden high-res images)
-    try {
-        const scripts = document.querySelectorAll('script');
-        // 優先度が高い画像の正規表現 (packshot, heroなど)
-        const priorityRegex = /(?:packshot|hero|cover|image|landingPage)[^}]+?https?:\\?\/\\?\/[^"']+\.media-amazon\.com\\?\/images\\?\/I\\?\/[a-zA-Z0-9\-\._\+]+(?:\.jpg|\.png)/gi;
-
-        for (const script of scripts) {
-            const content = script.textContent;
-            if (!content || content.length < 100) continue;
-
-            const matches = content.match(priorityRegex);
-            if (matches) {
-                for (const m of matches) {
-                    const urlMatch = m.match(/https?:\\?\/\\?\/[^"']+\.media-amazon\.com\\?\/images\\?\/I\\?\/[a-zA-Z0-9\-\._\+]+(?:\.jpg|\.png)/);
-                    if (urlMatch) {
-                        const rawUrl = urlMatch[0].replace(/\\/g, "");
-                        if (isValidImage(rawUrl)) candidates.push(rawUrl);
-                    }
-                }
-            }
-        }
-    } catch (e) { console.error("Script regex error", e); }
-
-    // D. Metadata & JSON
-    if (isValidImage(ogImage)) candidates.push(ogImage);
-    const jsonResult = tryJsonMetadata();
-    candidates.push(...jsonResult.images);
-    const packshotUrl = jsonResult.packshot; // キービジュアル（最優先）
 
     // ---------------------------------------------------------
     // 重複排除、サイズ取得、ソート
