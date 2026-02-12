@@ -29,7 +29,7 @@ const duplicateLink = document.getElementById("duplicateLink");
 const overwriteCoverEl = document.getElementById("overwriteCover");
 
 // 状態
-const VERSION = "v1.16.0";
+const VERSION = "v1.17.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = "鑑賞終了"; // 初期値
@@ -282,6 +282,9 @@ function handleExtractedMessage(data) {
   if (data.director) {
     extractedData.director = data.director;
   }
+  if (data.releaseYear) {
+    extractedData.releaseYear = data.releaseYear;
+  }
 
   if (data.url) extractedData.url = data.url;
   if (data.watched) extractedData.watched = data.watched;
@@ -505,6 +508,7 @@ saveBtn.addEventListener("click", async () => {
     tags: tags,
     rating: currentRating,
     director: extractedData?.director || "",
+    releaseYear: extractedData?.releaseYear || "",
     date: extractedData?.date || new Date().toISOString().split('T')[0],
     status: currentStatus,
     statusType: currentStatusType,

@@ -235,47 +235,72 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
         const image = finalImages.length > 0 ? finalImages[0] : "";
 
-        // 監督名の抽出（既存ロジック）
+        // 監督名・公開年の抽出（LD-JSON）
         let director = "";
+        let releaseYear = "";
         try {
             const ldJsons = document.querySelectorAll('script[type="application/ld+json"]');
             for (const script of ldJsons) {
                 try {
                     const data = JSON.parse(script.textContent);
-                    if (data.director) {
+                    if (data.director && !director) {
                         if (typeof data.director === 'string') director = data.director;
                         else if (data.director.name) director = data.director.name;
                         else if (Array.isArray(data.director)) {
                             director = data.director.map(d => typeof d === 'string' ? d : d.name).filter(Boolean).join(", ");
                         }
                     }
-                    if (director) break;
+                    // 公開日から年を抽出
+                    if (!releaseYear) {
+                        const dateStr = data.datePublished || data.dateCreated || data.releasedEvent?.startDate || "";
+                        const yearMatch = dateStr.match(/(\d{4})/);
+                        if (yearMatch) releaseYear = yearMatch[1];
+                    }
                 } catch (e) { }
             }
 
-            if (!director) {
+            // DOM上のラベルから監督名・公開年を抽出
+            if (!director || !releaseYear) {
                 const labelSelectors = ["._1H6ABQ", "._36v9Yk", "dt", "th"];
                 for (const sel of labelSelectors) {
                     const labels = document.querySelectorAll(sel);
                     for (const label of labels) {
                         const txt = label.textContent?.trim();
-                        if (txt && (txt.includes("監督") || txt.includes("演出") || txt.includes("Director"))) {
+                        if (!director && txt && (txt.includes("監督") || txt.includes("演出") || txt.includes("Director"))) {
+                            const val = label.nextElementSibling?.textContent?.trim();
+                            if (val) director = val;
+                        }
+                        if (!releaseYear && txt && (txt.includes("公開") || txt.includes("初公開日") || txt.includes("Release"))) {
                             const val = label.nextElementSibling?.textContent?.trim();
                             if (val) {
-                                director = val;
-                                break;
+                                const ym = val.match(/(\d{4})/);
+                                if (ym) releaseYear = ym[1];
                             }
                         }
                     }
-                    if (director) break;
                 }
             }
-        } catch (e) { console.error("Director extraction error", e); }
+
+            // script内のreleaseYearフィールドからも取得を試みる
+            if (!releaseYear) {
+                const scripts = document.querySelectorAll('script');
+                for (const script of scripts) {
+                    const content = script.textContent;
+                    if (!content || content.length < 100) continue;
+                    const yrMatch = content.match(/"releaseYear"\s*:\s*(\d{4})/);
+                    if (yrMatch) {
+                        releaseYear = yrMatch[1];
+                        break;
+                    }
+                }
+            }
+        } catch (e) { console.error("Metadata extraction error", e); }
 
         sendResponse({
             title: finalTitle,
             description: pickLongest(ogDesc, getMeta("description"), domDesc),
             director: director,
+            releaseYear: releaseYear,
             asin: asin,
             url,
             image,

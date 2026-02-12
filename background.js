@@ -44,6 +44,11 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         properties["ASIN"] = { "rich_text": [{ "text": { "content": payload.asin } }] };
     }
 
+    // 公開日を保存（年のみの場合は1月1日として保存）
+    if (payload.releaseYear) {
+        properties["公開日"] = { "date": { "start": `${payload.releaseYear}-01-01` } };
+    }
+
     // ステータスの設定（status型またはselect型に対応）
     // payload.statusType が渡されていればそれに従い、なければデフォルトで status を試す
     const statusVal = payload.status || "鑑賞終了";
