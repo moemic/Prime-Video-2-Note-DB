@@ -85,6 +85,17 @@
       z-index: 2;
     }
 
+    .carousel-item.page-cover {
+      border-color: #ff9800;
+      opacity: 1;
+      z-index: 2;
+    }
+
+    .carousel-item.selected.page-cover {
+      border-color: #ff9800;
+      box-shadow: 0 0 0 1px #4db8ff, 0 0 0 3px #ff9800;
+    }
+
     .carousel-nav {
       width: 24px;
       height: 100%;
@@ -116,6 +127,34 @@
       color: #888;
       padding-right: 4px;
     }
+
+    .image-selection-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #888;
+      padding: 2px 4px 0;
+    }
+
+    .image-selection-info .legend {
+      display: flex;
+      gap: 8px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+    }
+
+    .legend-dot.blue { background: #4db8ff; }
+    .legend-dot.orange { background: #ff9800; }
 
 
     .field {
@@ -410,6 +449,12 @@
       <button id="nextBtn" class="carousel-nav next">▶</button>
     </div>
     <div id="imgCounter" class="image-counter">0/0</div>
+    <div class="image-selection-info">
+      <div class="legend">
+        <span class="legend-item"><span class="legend-dot blue"></span>クリック: プロパティ</span>
+        <span class="legend-item"><span class="legend-dot orange"></span>右クリック: ページカバー</span>
+      </div>
+    </div>
   </div>
 
   <div class="field">
@@ -483,7 +528,7 @@
       <label class="field-label">Database ID</label>
       <input type="text" id="db" placeholder="d419b59d..." />
     </div>
-    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.19.0</div>
+    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.20.0</div>
   </div>
 
   <script src="popup.js"></script>

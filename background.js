@@ -109,12 +109,14 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         body.parent = { database_id: notionDbId };
     }
 
-    // カバー画像の設定条件:
+    // ページカバー画像の設定条件:
     // 1. 新規作成の場合は常にセット
     // 2. 既存ページでカバーがない場合はセット
     // 3. 既存ページでもoverwriteCoverがtrueならセット（上書き）
-    if (payload.image && (!pageId || !payload.hasCover || payload.overwriteCover)) {
-        body.cover = { type: "external", external: { url: payload.image } };
+    // pageCoverImageが指定されていればそれを使用、なければimageを使用
+    const pageCoverUrl = payload.pageCoverImage || payload.image;
+    if (pageCoverUrl && (!pageId || !payload.hasCover || payload.overwriteCover)) {
+        body.cover = { type: "external", external: { url: pageCoverUrl } };
     }
 
     const res = await fetch(url, {

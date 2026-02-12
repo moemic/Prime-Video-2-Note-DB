@@ -29,14 +29,15 @@ const duplicateLink = document.getElementById("duplicateLink");
 const overwriteCoverEl = document.getElementById("overwriteCover");
 
 // 状態
-const VERSION = "v1.19.0";
+const VERSION = "v1.20.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = "鑑賞終了"; // 初期値
 let statusOptionsData = []; // ステータス候補保持用
 let extractedData = {}; // nullからオブジェクトに変更
 let imageCandidates = []; // 新しい状態変数
-let currentImageIndex = 0; // selected image
+let currentImageIndex = 0; // selected image (プロパティ用)
+let pageCoverIndex = -1; // ページカバー用 (-1 = プロパティ用と同じ)
 let slideIndex = 0; // scroll position
 let existingPageId = null; // 既存ページID
 let currentStatusType = "status"; // Notion側のプロパティ型保持用
@@ -322,6 +323,10 @@ function updateCarousel() {
       img.className = 'carousel-item';
       img.dataset.index = index;
       img.onclick = () => selectImage(index);
+      img.oncontextmenu = (e) => {
+        e.preventDefault();
+        selectPageCover(index);
+      };
       carouselTrack.appendChild(img);
     });
   }
@@ -329,10 +334,12 @@ function updateCarousel() {
   // 2. Update Selection Style
   const items = carouselTrack.querySelectorAll('.carousel-item');
   items.forEach((item, index) => {
+    item.classList.remove('selected', 'page-cover');
     if (index === currentImageIndex) {
       item.classList.add('selected');
-    } else {
-      item.classList.remove('selected');
+    }
+    if (index === pageCoverIndex) {
+      item.classList.add('page-cover');
     }
   });
 
@@ -347,6 +354,12 @@ function updateCarousel() {
 
 function selectImage(index) {
   currentImageIndex = index;
+  updateCarousel();
+}
+
+function selectPageCover(index) {
+  // 同じ画像を再度右クリックしたら解除（プロパティ用と同じに戻す）
+  pageCoverIndex = (pageCoverIndex === index) ? -1 : index;
   updateCarousel();
 }
 
@@ -489,10 +502,13 @@ saveBtn.addEventListener("click", async () => {
   // 設定を保存 (local)
   await chrome.storage.local.set({ notionToken, notionDbId });
 
-  // 選択された画像を使用
+  // プロパティ用画像（クリックで選択した画像）
   const coverImage = imageCandidates.length > 0 ? imageCandidates[currentImageIndex] : "";
 
-  // 残りの画像（カバー以外）をファイルプロパティ用に収集
+  // ページカバー用画像（右クリックで選択、未選択ならプロパティ用と同じ）
+  const pageCoverImage = pageCoverIndex >= 0 ? imageCandidates[pageCoverIndex] : coverImage;
+
+  // 残りの画像をファイルプロパティ用に収集
   const otherImages = imageCandidates.filter((_, i) => i !== currentImageIndex);
 
   // ペイロードを構築
@@ -504,6 +520,7 @@ saveBtn.addEventListener("click", async () => {
     url: extractedData?.url || "",
     asin: currentAsin,
     image: coverImage,
+    pageCoverImage: pageCoverImage,
     images: otherImages,
     tags: tags,
     rating: currentRating,
