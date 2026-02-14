@@ -98,7 +98,59 @@ function getHighResUrl(url) {
     return cleaned;
 }
 
-// タイトルのクリーニング
+// Amazonの宣伝文パターン（よく出る表現）
+const AMAZON_PROMOTION_PATTERNS = [
+    /【プ?プ?ラ?イ?ド会員なら.*話までお試し見放題】/,
+    /【.*話お試し.*】/,
+    /プライム会員なら.*話まで.*$/,
+    /Prime Videoで.*$/,
+];
+
+// Amazon宣伝文が含まれているかチェック
+function hasAmazonPromotion(text) {
+    if (!text) return false;
+    const cleanText = text.trim();
+    return AMAZON_PROMOTION_PATTERNS.some(pattern => pattern.test(cleanText));
+}
+
+function removeAmazonPromotionText(text) {
+    if (!text) return "";
+    let cleaned = text;
+    for (const pattern of AMAZON_PROMOTION_PATTERNS) {
+        cleaned = cleaned.replace(new RegExp(pattern.source, pattern.flags), " ");
+    }
+    return cleaned.replace(/\s+/g, " ").trim();
+}
+
+// タイトルの正準化（normalize）
+// 表記揺れを行い、、DB重複チェックの精度を向上
+function normalizeTitle(rawTitle) {
+    if (!rawTitle) return "";
+    let title = rawTitle.trim();
+
+    // 1. 連続するスペースを削除
+    title = title.replace(/\s+/g, " ");
+
+    // 2. 数字の正準化（全角・半角の統一）
+    // 全角数字を半角数字に統一（Unicode: FF10-FF19 -> 30-39）
+    title = title.replace(/[\uFF10-\uFF19]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+
+    // 3. 括弧を削除（全角・半角）を一括弧に統一
+    title = title.replace(/[（）()]/g, "");
+    title = title.replace(/[\(\)]/g, "");
+
+    // 4. 末尾のスペースを削除
+    title = title.replace(/\s+$/, "");
+
+    // 5. その他の不要なプレフィックスを削除
+    title = title.replace(/^Amazon\.co\.jp[:：]\s*/, "");
+    title = title.replace(/\s*\|\s*Prime Video$/, "");
+    title = title.replace(/\s*を観る$/, "");
+
+    return title.trim();
+}
+
+// タイトルのクリーニング（Amazon宣伝文等を除去）
 function cleanTitle(rawTitle) {
     if (!rawTitle) return "";
     let title = rawTitle.trim();
@@ -121,7 +173,9 @@ async function getImageSize(url) {
             return length ? parseInt(length, 10) : 0;
         }
     } catch (e) {
-        // console.error("HEAD request failed for", url, e);
+        // HEADリクエスト失敗時はサイズ0として扱い処理を続ける
+        // "Receiving end does not exist" エラー等に対応
+        console.warn("HEAD request failed for", url, "error:", e.message);
     }
     return 0;
 }
@@ -159,6 +213,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const ogTitle = getMeta("og:title");
     const ogDesc = getMeta("og:description");
     const metaTitle = getMeta("title");
+
+    // Amazon宣伝文チェック
+    const titleHasPromotion = hasAmazonPromotion(ogTitle) || hasAmazonPromotion(metaTitle);
+    const descHasPromotion = hasAmazonPromotion(ogDesc);
 
     // DOM上の作品名要素（data-automation-id="title" が最も信頼性が高い）
     const domTitle = tryDomText([
@@ -198,7 +256,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         // DOM要素（data-automation-id="title"等）が最も信頼性が高いため最優先
         // meta titleやdocument.titleにはキャッチコピーが入ることがある
         let rawTitle = domTitle || ogTitle || metaTitle || document.title;
-        const finalTitle = cleanTitle(rawTitle);
+        let finalTitle = cleanTitle(rawTitle);
+
+        // Amazon宣伝文が含まれる場合は自動除去してタイトルに反映
+        if (titleHasPromotion) {
+            finalTitle = cleanTitle(removeAmazonPromotionText(rawTitle));
+        }
+
+        // 正準化タイトル（DB照合用）を生成
+        const normalizedTitle = normalizeTitle(rawTitle);
 
         const uniqueImages = [...new Set(candidates)];
 
@@ -248,7 +314,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                         if (typeof data.director === 'string') director = data.director;
                         else if (data.director.name) director = data.director.name;
                         else if (Array.isArray(data.director)) {
-                            director = data.director.map(d => typeof d === 'string' ? d : d.name).filter(Boolean).join(", ");
+                            // オジェクト配列の場合は名前を結合（対応追加）
+                            director = data.director.map(d => typeof d === 'string' ? d : (d?.name || d)).filter(Boolean).join(", ");
                         }
                     }
                     // 公開日から年を抽出
@@ -306,7 +373,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             url,
             image,
             images: finalImages,
-            watched: true
+            watched: true,
+            hasPromotion: titleHasPromotion || descHasPromotion,
+            normalizedTitle: normalizedTitle
         });
     })();
 
