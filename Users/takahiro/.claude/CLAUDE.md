@@ -7,5 +7,9 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #1565 | 6:34 PM | 🔵 | Claude Code uses OAuth authentication instead of API keys | ~218 |
+| #1564 | " | ✅ | Claude Code migrated from GLM proxy to official Anthropic API | ~269 |
+| #1563 | 6:32 PM | 🔵 | Claude Code settings configured with custom GLM models via Anthropic-compatible API endpoint | ~283 |
+| #1562 | " | ✅ | Claude Code settings.json configured to use Claude AI provider | ~190 |
 | #1561 | 6:30 PM | ✅ | Claude Code AI provider configuration updated from GLM to Claude | ~230 |
 </claude-mem-context>
