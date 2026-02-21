@@ -376,6 +376,23 @@ async function getNotionDatabaseTags({ notionToken, notionDbId }) {
     return [];
 }
 
+async function getNotionPageComments({ notionToken, pageId }) {
+    const res = await notionFetch(`https://api.notion.com/v1/comments?block_id=${pageId}`, {
+        method: "GET",
+        headers: {
+            "Authorization": `Bearer ${notionToken}`,
+            "Notion-Version": NOTION_VERSION
+        }
+    });
+    if (!res.ok) return "";
+    const data = await res.json();
+    if (!data.results || data.results.length === 0) return "";
+    return data.results
+        .map(c => c.rich_text?.map(t => t.plain_text).join("") || "")
+        .filter(text => text.trim())
+        .join("\n---\n");
+}
+
 async function getNotionStatusOptions({ notionToken, notionDbId }) {
     const res = await notionFetch(`https://api.notion.com/v1/databases/${notionDbId}`, {
         method: "GET",
@@ -654,9 +671,37 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                     title: msg.title,
                     normalizedTitle: msg.normalizedTitle
                 });
-                sendResponse({ ok: true, ...result });
+                // 重複ページが見つかった場合はコメントも取得
+                if (result.duplicate && result.pageId) {
+                    try {
+                        const comment = await getNotionPageComments({ notionToken, pageId: result.pageId });
+                        sendResponse({ ok: true, ...result, comment });
+                    } catch (_) {
+                        sendResponse({ ok: true, ...result });
+                    }
+                } else {
+                    sendResponse({ ok: true, ...result });
+                }
             } catch (e) {
                 console.error("Duplicate Check Error:", e);
+                sendResponse({ ok: false, error: String(e.message || e) });
+            }
+        })();
+        return true;
+    }
+
+    if (msg?.type === "GET_PAGE_COMMENTS") {
+        (async () => {
+            const { notionToken } = await chrome.storage.local.get(["notionToken"]);
+            if (!notionToken) {
+                sendResponse({ ok: false, error: "Settings missing" });
+                return;
+            }
+            try {
+                const comment = await getNotionPageComments({ notionToken, pageId: msg.pageId });
+                sendResponse({ ok: true, comment });
+            } catch (e) {
+                console.error("Get Comments Error:", e);
                 sendResponse({ ok: false, error: String(e.message || e) });
             }
         })();

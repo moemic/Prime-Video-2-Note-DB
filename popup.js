@@ -216,6 +216,9 @@ async function checkDuplicate(title) {
         currentStatus = res.status;
         renderStatus();
       }
+      if (res.comment !== undefined) {
+        commentEl.value = res.comment;
+      }
 
       duplicateWarning.style.display = "block";
       candidatesWarning.style.display = "none";
@@ -241,7 +244,7 @@ async function checkDuplicate(title) {
         const useBtn = document.createElement("button");
         useBtn.className = "candidate-use-btn";
         useBtn.textContent = "これを使う";
-        useBtn.onclick = () => {
+        useBtn.onclick = async () => {
           existingPageId = c.pageId;
           hasCover = c.hasCover || false;
           existingFiles = c.existingFiles || [];
@@ -259,6 +262,14 @@ async function checkDuplicate(title) {
           if (c.director) extractedData.director = c.director;
           if (c.date) extractedData.date = c.date;
           if (c.status) { currentStatus = c.status; renderStatus(); }
+
+          // コメントを取得して表示
+          try {
+            const commentRes = await chrome.runtime.sendMessage({ type: "GET_PAGE_COMMENTS", pageId: c.pageId });
+            if (commentRes?.ok && commentRes.comment !== undefined) {
+              commentEl.value = commentRes.comment;
+            }
+          } catch (_) {}
 
           duplicateWarning.style.display = "block";
           candidatesWarning.style.display = "none";
