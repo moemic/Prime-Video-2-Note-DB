@@ -194,7 +194,7 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         "Name": { "title": [{ "text": { "content": trimNotionText(payload.title || "") } }] },
         "URL": { "url": payload.url || null },
         "概要": { "rich_text": [{ "text": { "content": trimNotionText(payload.description || "") } }] },
-        "著者": { "rich_text": [{ "text": { "content": trimNotionText(payload.director || "") } }] },
+        "監督": { "rich_text": [{ "text": { "content": trimNotionText(payload.director || "") } }] },
         "日付": { "date": { "start": payload.date || new Date().toISOString().split('T')[0] } }
     };
 
@@ -318,7 +318,7 @@ async function completeNotionPage({ notionToken, payload }) {
         properties["概要"] = { "rich_text": [{ "text": { "content": trimNotionText(payload.description) } }] };
     }
     if (payload.director) {
-        properties["著者"] = { "rich_text": [{ "text": { "content": trimNotionText(payload.director) } }] };
+        properties["監督"] = { "rich_text": [{ "text": { "content": trimNotionText(payload.director) } }] };
     }
     if (payload.releaseYear) {
         properties["公開日"] = { "date": { "start": `${payload.releaseYear}-01-01` } };
@@ -413,7 +413,7 @@ function buildExistingData(page) {
         rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
         tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
         description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
-        director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : "",
+        director: props["監督"]?.rich_text ? props["監督"].rich_text.map(t => t.plain_text).join("") : "",
         date: props["日付"]?.date ? props["日付"].date.start : "",
         status: props["ステータス"]?.status ? props["ステータス"].status.name : (props["ステータス"]?.select ? props["ステータス"].select.name : ""),
         hasCover: !!page.cover,
