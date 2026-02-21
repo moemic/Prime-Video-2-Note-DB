@@ -246,8 +246,9 @@
     }
 
     .tag {
-      background: #4db8ff;
-      color: #1a1d21;
+      background: var(--chip-bg, #4db8ff);
+      color: var(--chip-fg, #1a1d21);
+      border: 1px solid var(--chip-border, transparent);
       padding: 4px 8px;
       border-radius: 4px;
       font-size: 12px;
@@ -269,9 +270,9 @@
     }
 
     .tag-chip {
-      background: #2d3239;
-      color: #888;
-      border: 1px solid #4a5058;
+      background: var(--chip-bg, #2d3239);
+      color: var(--chip-fg, #888);
+      border: 1px solid var(--chip-border, #4a5058);
       padding: 4px 10px;
       border-radius: 12px;
       font-size: 11px;
@@ -280,14 +281,13 @@
     }
 
     .tag-chip:hover {
-      background: #3a414a;
-      border-color: #666;
+      filter: brightness(1.08);
     }
 
     .tag-chip.selected {
-      background: rgba(77, 184, 255, 0.15);
-      color: #4db8ff;
-      border-color: #4db8ff;
+      background: var(--chip-selected-bg, rgba(77, 184, 255, 0.15));
+      color: var(--chip-selected-fg, #4db8ff);
+      border-color: var(--chip-selected-border, #4db8ff);
     }
 
     .tags-input input {

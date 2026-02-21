@@ -44,11 +44,14 @@ let currentStatusType = "status"; // Notion側のプロパティ型保持用
 let hasCover = false; // 既存カバーの有無
 let existingFiles = []; // 既存のファイルリスト
 let currentAsin = ""; // 作品固有のASIN
+let chipColorMap = {}; // token -> hue
 
 // 初期化
 (async () => {
   // 設定を読み込み (localに変更)
   const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
+  const { chipColorMap: storedChipColorMap } = await chrome.storage.local.get(["chipColorMap"]);
+  chipColorMap = storedChipColorMap && typeof storedChipColorMap === "object" ? storedChipColorMap : {};
 
   if (notionToken) tokenEl.value = notionToken;
 
@@ -97,6 +100,84 @@ let currentAsin = ""; // 作品固有のASIN
   fetchNotionTags();
   fetchNotionStatusOptions();
 })();
+
+function normalizeTokenKey(token) {
+  return String(token || "").trim().toLowerCase();
+}
+
+function hashText(input) {
+  const text = String(input || "");
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return hash >>> 0;
+}
+
+function getUsedHues(exceptKey = "") {
+  const used = new Set();
+  Object.entries(chipColorMap).forEach(([key, hue]) => {
+    if (key === exceptKey) return;
+    if (Number.isFinite(hue)) used.add(hue);
+  });
+  return used;
+}
+
+function assignUniqueHue(key) {
+  const base = hashText(key) % 360;
+  const used = getUsedHues(key);
+  if (!used.has(base)) return base;
+  for (let delta = 1; delta < 360; delta++) {
+    const p = (base + delta) % 360;
+    if (!used.has(p)) return p;
+    const n = (base - delta + 360) % 360;
+    if (!used.has(n)) return n;
+  }
+  return base;
+}
+
+function ensureHue(token) {
+  const key = normalizeTokenKey(token);
+  if (!key) return 200;
+  const existing = chipColorMap[key];
+  if (Number.isFinite(existing)) return existing;
+  const hue = assignUniqueHue(key);
+  chipColorMap[key] = hue;
+  chrome.storage.local.set({ chipColorMap }).catch(() => {});
+  return hue;
+}
+
+function getTokenColors(token) {
+  const hue = ensureHue(token);
+  return {
+    bg: `hsla(${hue}, 70%, 42%, 0.28)`,
+    fg: `hsl(${hue}, 88%, 78%)`,
+    border: `hsla(${hue}, 72%, 58%, 0.85)`,
+    selectedBg: `hsla(${hue}, 78%, 48%, 0.32)`,
+    selectedFg: `hsl(${hue}, 92%, 84%)`,
+    selectedBorder: `hsla(${hue}, 85%, 64%, 0.95)`,
+    solidBg: `hsl(${hue}, 74%, 60%)`,
+    solidFg: "#1a1d21",
+    solidBorder: `hsla(${hue}, 70%, 40%, 0.95)`
+  };
+}
+
+function applyChipColor(el, token, mode = "candidate") {
+  const c = getTokenColors(token);
+  if (mode === "selected") {
+    el.style.setProperty("--chip-bg", c.solidBg);
+    el.style.setProperty("--chip-fg", c.solidFg);
+    el.style.setProperty("--chip-border", c.solidBorder);
+    return;
+  }
+  el.style.setProperty("--chip-bg", c.bg);
+  el.style.setProperty("--chip-fg", c.fg);
+  el.style.setProperty("--chip-border", c.border);
+  el.style.setProperty("--chip-selected-bg", c.selectedBg);
+  el.style.setProperty("--chip-selected-fg", c.selectedFg);
+  el.style.setProperty("--chip-selected-border", c.selectedBorder);
+}
 
 async function checkDuplicate(title) {
   try {
@@ -170,6 +251,7 @@ function renderSuggestedTags(notionTags) {
     const chip = document.createElement("span");
     chip.className = "tag-chip";
     chip.textContent = tag;
+    applyChipColor(chip, tag);
     if (tags.includes(tag)) chip.classList.add("selected");
     chip.onclick = () => toggleTagFromChip(tag, chip);
     suggestedTagsContainer.appendChild(chip);
@@ -227,6 +309,7 @@ function renderStatus() {
     const chip = document.createElement("span");
     chip.className = "tag"; // タグと同じスタイルを使用
     chip.innerHTML = `${currentStatus} <span class="remove">×</span>`;
+    applyChipColor(chip, currentStatus, "selected");
     chip.querySelector(".remove").addEventListener("click", () => removeStatus());
     statusContainer.insertBefore(chip, statusInput);
   }
@@ -238,6 +321,7 @@ function renderSuggestedStatuses() {
     const chip = document.createElement("span");
     chip.className = "tag-chip";
     chip.textContent = opt.name;
+    applyChipColor(chip, opt.name);
 
     // 現在のステータスと一致していれば選択状態にする
     if (currentStatus === opt.name) {
@@ -423,6 +507,7 @@ function renderTags() {
     const tagEl = document.createElement("span");
     tagEl.className = "tag";
     tagEl.innerHTML = `${tag} <span class="remove">×</span>`;
+    applyChipColor(tagEl, tag, "selected");
     tagEl.querySelector(".remove").addEventListener("click", () => removeTag(tag));
     tagsContainer.insertBefore(tagEl, tagInput);
   });

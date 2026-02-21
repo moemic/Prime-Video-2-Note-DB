@@ -32,49 +32,69 @@ function extractTargetImages() {
             const content = script.textContent;
             if (!content || content.length < 100) return;
 
-            // titleshot（タイトル画像）
-            if (content.includes('titleshot')) {
-                const matches = content.match(/"titleshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
-                if (matches) {
-                    matches.forEach(m => {
-                        const url = m.match(/https?:\/\/[^"]+/);
-                        if (url && isValidImage(url[0])) {
-                            images.push(url[0]);
-                        }
-                    });
+            const normalizeEscapedUrl = (value) => {
+                return (value || "")
+                    .replace(/\\u002F/gi, "/")
+                    .replace(/\\x2F/gi, "/")
+                    .replace(/\\\//g, "/")
+                    .trim();
+            };
+
+            const collectUrls = (text) => {
+                const found = [];
+                const urlRegex = /(https?:(?:\\\/\\\/|\/\/)[^"'\\\s]+)/g;
+                let urlMatch;
+                while ((urlMatch = urlRegex.exec(text)) !== null) {
+                    const normalized = normalizeEscapedUrl(urlMatch[1]);
+                    if (normalized && isValidImage(normalized)) found.push(normalized);
                 }
-            }
+                return found;
+            };
+
+            const pushByKey = (key, onFound) => {
+                const keyPattern = `["']?${key}["']?`;
+
+                // 1) titleshot: "https://..."
+                const directRegex = new RegExp(`${keyPattern}\\s*:\\s*"([^"]+)"`, "gi");
+                let directMatch;
+                while ((directMatch = directRegex.exec(content)) !== null) {
+                    const normalized = normalizeEscapedUrl(directMatch[1]);
+                    if (normalized && isValidImage(normalized)) {
+                        if (onFound) onFound(normalized);
+                        images.push(normalized);
+                    }
+                }
+
+                // 2) titleshot: { ... "https://..." ... } のような入れ子
+                const objectRegex = new RegExp(`${keyPattern}\\s*:\\s*\\{([\\s\\S]{0,1600}?)\\}`, "gi");
+                let objectMatch;
+                while ((objectMatch = objectRegex.exec(content)) !== null) {
+                    const block = objectMatch[1] || "";
+                    const urls = collectUrls(block);
+                    for (const url of urls) {
+                        if (onFound) onFound(url);
+                        images.push(url);
+                    }
+                }
+            };
+
+            // titleshot（タイトル画像）
+            if (content.includes('titleshot')) pushByKey("titleshot");
 
             // packshot（キービジュアル）- 最優先
             if (content.includes('packshot')) {
-                const matches = content.match(/"packshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
-                if (matches) {
-                    matches.forEach(m => {
-                        const url = m.match(/https?:\/\/[^"]+/);
-                        if (url && isValidImage(url[0])) {
-                            if (!packshot) packshot = url[0];
-                            images.push(url[0]);
-                        }
-                    });
-                }
+                pushByKey("packshot", (url) => {
+                    if (!packshot) packshot = url;
+                });
             }
 
             // heroshot（バナー画像）
-            if (content.includes('heroshot')) {
-                const matches = content.match(/"heroshot"\s*:\s*"(https?:\/\/[^"]+)"/g);
-                if (matches) {
-                    matches.forEach(m => {
-                        const url = m.match(/https?:\/\/[^"]+/);
-                        if (url && isValidImage(url[0])) {
-                            images.push(url[0]);
-                        }
-                    });
-                }
-            }
+            if (content.includes('heroshot')) pushByKey("heroshot");
         });
     } catch (e) {
         console.error("Image extraction error", e);
     }
+    console.debug("[Prime2Notion] image candidates", { count: images.length, packshot });
     return { images: images.filter(isValidImage), packshot };
 }
 
