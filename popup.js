@@ -31,7 +31,7 @@ const candidatesWarning = document.getElementById("candidatesWarning");
 const candidatesList = document.getElementById("candidatesList");
 
 // 状態
-const VERSION = "v1.20.0";
+const VERSION = "v1.21.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）

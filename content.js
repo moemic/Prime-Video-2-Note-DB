@@ -21,8 +21,8 @@ function tryDomText(selectors) {
     return "";
 }
 
-// JSONデータからtitleshot・packshot・heroshotのみを抽出する
-// covershot（エピソードサムネイル）やその他の画像は対象外
+// JSONデータからtitleshot・packshot・heroshot・covershotを抽出する
+// covershot（エピソードサムネイル）は最低優先度で追加
 function extractTargetImages() {
     const images = [];
     let packshot = "";
@@ -90,6 +90,9 @@ function extractTargetImages() {
 
             // heroshot（バナー画像）
             if (content.includes('heroshot')) pushByKey("heroshot");
+
+            // covershot（エピソードサムネイル）- 最低優先度
+            if (content.includes('covershot')) pushByKey("covershot");
         });
     } catch (e) {
         console.error("Image extraction error", e);
@@ -256,7 +259,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     ]);
 
     // ---------------------------------------------------------
-    // 画像候補の収集 (titleshot / packshot / heroshot のみ)
+    // 画像候補の収集 (packshot > titleshot > heroshot > covershot の優先順)
     // ---------------------------------------------------------
     const targetImages = extractTargetImages();
     const candidates = [...targetImages.images];
