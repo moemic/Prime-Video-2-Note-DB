@@ -193,7 +193,6 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     const properties = {
         "Name": { "title": [{ "text": { "content": trimNotionText(payload.title || "") } }] },
         "URL": { "url": payload.url || null },
-<<<<<<< HEAD
         "概要": { "rich_text": [{ "text": { "content": trimNotionText(payload.description || "") } }] },
         "著者": { "rich_text": [{ "text": { "content": trimNotionText(payload.director || "") } }] },
         "日付": { "date": { "start": payload.date || new Date().toISOString().split('T')[0] } }
