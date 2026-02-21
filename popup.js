@@ -27,6 +27,8 @@ const saveBtn = document.getElementById("saveBtn"); // 明示的に取得
 const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
 const overwriteCoverEl = document.getElementById("overwriteCover");
+const candidatesWarning = document.getElementById("candidatesWarning");
+const candidatesList = document.getElementById("candidatesList");
 
 // 状態
 const VERSION = "v1.20.0";
@@ -216,11 +218,62 @@ async function checkDuplicate(title) {
       }
 
       duplicateWarning.style.display = "block";
+      candidatesWarning.style.display = "none";
       hasCover = res.hasCover || false;
       existingFiles = res.existingFiles || [];
+    } else if (res?.ok && res.candidates && res.candidates.length > 0) {
+      // 候補リストの表示
+      existingPageId = null;
+      duplicateWarning.style.display = "none";
+      hasCover = false;
+      existingFiles = [];
+
+      candidatesList.innerHTML = "";
+      res.candidates.forEach(c => {
+        const li = document.createElement("li");
+        li.className = "candidate-item";
+
+        const a = document.createElement("a");
+        a.href = c.url;
+        a.target = "_blank";
+        a.textContent = c.title || "（タイトル不明）";
+
+        const useBtn = document.createElement("button");
+        useBtn.className = "candidate-use-btn";
+        useBtn.textContent = "これを使う";
+        useBtn.onclick = () => {
+          existingPageId = c.pageId;
+          hasCover = c.hasCover || false;
+          existingFiles = c.existingFiles || [];
+
+          const linkEl = duplicateWarning.querySelector("#duplicateLink");
+          if (linkEl) linkEl.href = c.url;
+          const textNode = duplicateWarning.firstChild;
+          if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+            textNode.textContent = "⚠️ すでに登録されています：";
+          }
+
+          if (c.rating !== undefined) { currentRating = c.rating; updateStars(); }
+          if (c.tags) { tags = c.tags; renderTags(); }
+          if (c.description) noteEl.value = c.description;
+          if (c.director) extractedData.director = c.director;
+          if (c.date) extractedData.date = c.date;
+          if (c.status) { currentStatus = c.status; renderStatus(); }
+
+          duplicateWarning.style.display = "block";
+          candidatesWarning.style.display = "none";
+        };
+
+        li.appendChild(a);
+        li.appendChild(useBtn);
+        candidatesList.appendChild(li);
+      });
+
+      candidatesWarning.style.display = "block";
     } else {
       existingPageId = null;
       duplicateWarning.style.display = "none";
+      candidatesWarning.style.display = "none";
       hasCover = false;
       existingFiles = [];
     }
@@ -228,6 +281,7 @@ async function checkDuplicate(title) {
     console.error("重複チェックエラー:", e);
     existingPageId = null;
     duplicateWarning.style.display = "none";
+    candidatesWarning.style.display = "none";
   }
 }
 
