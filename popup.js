@@ -46,6 +46,7 @@ let currentStatusType = "status"; // Notion側のプロパティ型保持用
 let hasCover = false; // 既存カバーの有無
 let existingFiles = []; // 既存のファイルリスト
 let currentAsin = ""; // 作品固有のASIN
+let loadedComment = ""; // Notionから読み込んだ既存コメント（二重送信防止用）
 let chipColorMap = {}; // token -> hue
 
 // 初期化
@@ -218,6 +219,7 @@ async function checkDuplicate(title) {
       }
       if (res.comment !== undefined) {
         commentEl.value = res.comment;
+        loadedComment = res.comment;
       }
 
       duplicateWarning.style.display = "block";
@@ -268,6 +270,7 @@ async function checkDuplicate(title) {
             const commentRes = await chrome.runtime.sendMessage({ type: "GET_PAGE_COMMENTS", pageId: c.pageId });
             if (commentRes?.ok && commentRes.comment !== undefined) {
               commentEl.value = commentRes.comment;
+              loadedComment = commentRes.comment;
             }
           } catch (_) {}
 
@@ -287,12 +290,14 @@ async function checkDuplicate(title) {
       candidatesWarning.style.display = "none";
       hasCover = false;
       existingFiles = [];
+      loadedComment = "";
     }
   } catch (e) {
     console.error("重複チェックエラー:", e);
     existingPageId = null;
     duplicateWarning.style.display = "none";
     candidatesWarning.style.display = "none";
+    loadedComment = "";
   }
 }
 
@@ -663,7 +668,7 @@ saveBtn.addEventListener("click", async () => {
     pageId: existingPageId, // 既存IDがあれば含める
     title: titleEl.value.trim(),
     description: noteEl.value.trim(),
-    comment: commentEl.value.trim(),
+    comment: (commentEl.value.trim() !== loadedComment.trim()) ? commentEl.value.trim() : "",
     url: extractedData?.url || "",
     asin: currentAsin,
     image: coverImage,
