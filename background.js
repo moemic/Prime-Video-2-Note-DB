@@ -35,7 +35,7 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         "URL": { "url": payload.url || null },
         "概要": { "rich_text": [{ "text": { "content": payload.description || "" } }] },
         "鑑賞終了": { "checkbox": true },
-        "著者": { "rich_text": [{ "text": { "content": payload.director || "" } }] },
+        "監督": { "rich_text": [{ "text": { "content": payload.director || "" } }] },
         "日付": { "date": { "start": payload.date || new Date().toISOString().split('T')[0] } }
     };
 
@@ -213,7 +213,7 @@ async function checkDuplicateTitle({ notionToken, notionDbId, title }) {
             rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
             tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
             description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
-            director: props["著者"]?.rich_text ? props["著者"].rich_text.map(t => t.plain_text).join("") : "",
+            director: props["監督"]?.rich_text ? props["監督"].rich_text.map(t => t.plain_text).join("") : "",
             date: props["日付"]?.date ? props["日付"].date.start : "",
             status: props["ステータス"]?.status ? props["ステータス"].status.name : (props["ステータス"]?.select ? props["ステータス"].select.name : "")
         };
