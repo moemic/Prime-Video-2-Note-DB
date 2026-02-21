@@ -10,6 +10,35 @@ const NOTION_MAX_RETRIES = 5;
 let notionQueue = Promise.resolve();
 let lastNotionRequestAt = 0;
 
+// ==========================================
+// 表示モード管理（ポップアップ / サイドパネル）
+// ==========================================
+async function applyDisplayMode(mode) {
+    if (mode === "sidepanel" && chrome.sidePanel) {
+        // ポップアップを無効化し、アイコンクリックでサイドパネルを開く
+        await chrome.action.setPopup({ popup: "" });
+        await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+    } else {
+        // ポップアップモード（デフォルト）
+        await chrome.action.setPopup({ popup: "popup.html" });
+        if (chrome.sidePanel) {
+            await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
+        }
+    }
+}
+
+// サービスワーカー起動時に保存済みモードを適用
+(async () => {
+    const { displayMode } = await chrome.storage.local.get(["displayMode"]);
+    await applyDisplayMode(displayMode || "popup");
+})();
+
+// インストール/更新時にもモードを適用
+chrome.runtime.onInstalled.addListener(async () => {
+    const { displayMode } = await chrome.storage.local.get(["displayMode"]);
+    await applyDisplayMode(displayMode || "popup");
+});
+
 // Amazon宣伝文パターン（content.jsと共通）
 const AMAZON_PROMOTION_PATTERNS = [
     /【プ?プ?ラ?イ?ド会員なら.*話までお試し見放題】/,
@@ -210,9 +239,11 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
 
     // ステータスの設定（status型またはselect型に対応）
     // payload.statusType が渡されていればそれに従い、なければデフォルトで status を試す
-    const statusVal = payload.status || "鑑賞終了";
-    const statusType = payload.statusType || "status";
-    properties["ステータス"] = { [statusType]: { "name": statusVal } };
+    // ステータスが未選択の場合はプロパティを設定しない（空欄のまま保存）
+    if (payload.status) {
+        const statusType = payload.statusType || "status";
+        properties["ステータス"] = { [statusType]: { "name": payload.status } };
+    }
 
     // サムネイルを「カバー画像」プロパティ（Files & media）に入れる
     const allImages = buildMergedImageFiles(payload);
@@ -604,6 +635,19 @@ async function checkDuplicateByAsin({ notionToken, notionDbId, asin, title, norm
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === "SWITCH_DISPLAY_MODE") {
+        (async () => {
+            try {
+                await applyDisplayMode(msg.mode || "popup");
+                sendResponse({ ok: true });
+            } catch (e) {
+                console.error("Display mode switch error:", e);
+                sendResponse({ ok: false, error: String(e.message || e) });
+            }
+        })();
+        return true;
+    }
+
     if (msg?.type === "CREATE_NOTION_PAGE") {
         (async () => {
             const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
@@ -671,14 +715,26 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                     title: msg.title,
                     normalizedTitle: msg.normalizedTitle
                 });
-                // 重複ページが見つかった場合はコメントも取得
+                // 重複ページが見つかった場合はコメントも取得し、さらに類似候補も検索
                 if (result.duplicate && result.pageId) {
+                    let comment = "";
                     try {
-                        const comment = await getNotionPageComments({ notionToken, pageId: result.pageId });
-                        sendResponse({ ok: true, ...result, comment });
-                    } catch (_) {
-                        sendResponse({ ok: true, ...result });
-                    }
+                        comment = await getNotionPageComments({ notionToken, pageId: result.pageId });
+                    } catch (_) {}
+
+                    // 完全一致でも類似候補を並行表示するため候補検索を実行
+                    let candidates = [];
+                    try {
+                        const allCandidates = await findTitleCandidates({
+                            notionToken, notionDbId,
+                            title: msg.title,
+                            normalizedTitle: msg.normalizedTitle
+                        });
+                        // 完全一致ページ自体は候補から除外
+                        candidates = allCandidates.filter(c => c.pageId !== result.pageId);
+                    } catch (_) {}
+
+                    sendResponse({ ok: true, ...result, comment, candidates });
                 } else {
                     sendResponse({ ok: true, ...result });
                 }

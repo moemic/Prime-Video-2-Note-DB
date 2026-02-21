@@ -29,9 +29,12 @@ const duplicateLink = document.getElementById("duplicateLink");
 const overwriteCoverEl = document.getElementById("overwriteCover");
 const candidatesWarning = document.getElementById("candidatesWarning");
 const candidatesList = document.getElementById("candidatesList");
+const existingCommentSection = document.getElementById("existingCommentSection");
+const existingCommentDisplay = document.getElementById("existingCommentDisplay");
+const reloadBtn = document.getElementById("reloadBtn");
 
 // 状態
-const VERSION = "v1.21.0";
+const VERSION = "v1.23.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）
@@ -46,7 +49,6 @@ let currentStatusType = "status"; // Notion側のプロパティ型保持用
 let hasCover = false; // 既存カバーの有無
 let existingFiles = []; // 既存のファイルリスト
 let currentAsin = ""; // 作品固有のASIN
-let loadedComment = ""; // Notionから読み込んだ既存コメント（二重送信防止用）
 let chipColorMap = {}; // token -> hue
 
 // 初期化
@@ -55,6 +57,19 @@ let chipColorMap = {}; // token -> hue
   const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
   const { chipColorMap: storedChipColorMap } = await chrome.storage.local.get(["chipColorMap"]);
   chipColorMap = storedChipColorMap && typeof storedChipColorMap === "object" ? storedChipColorMap : {};
+
+  // 表示モード検出 & 適用
+  const { displayMode } = await chrome.storage.local.get(["displayMode"]);
+  const currentMode = displayMode || "popup";
+  document.body.dataset.mode = currentMode;
+  const modeRadios = document.querySelectorAll('input[name="displayMode"]');
+  modeRadios.forEach(radio => { radio.checked = (radio.value === currentMode); });
+
+  // sidePanel APIが無い古いChromeではモード選択を非表示
+  if (!chrome.sidePanel) {
+    const modeSelectorField = document.getElementById("modeSelectorField");
+    if (modeSelectorField) modeSelectorField.style.display = "none";
+  }
 
   if (notionToken) tokenEl.value = notionToken;
   if (notionDbId) dbEl.value = notionDbId;
@@ -179,6 +194,28 @@ function applyChipColor(el, token, mode = "candidate") {
   el.style.setProperty("--chip-selected-border", c.selectedBorder);
 }
 
+// 既存コメント表示エリアにコメントを表示
+function showExistingComments(commentText) {
+  if (commentText) {
+    // "---" 区切りで複数コメントを分割して表示
+    const comments = commentText.split("\n---\n");
+    existingCommentDisplay.innerHTML = "";
+    comments.forEach((c, i) => {
+      if (i > 0) {
+        const hr = document.createElement("hr");
+        hr.className = "comment-separator";
+        existingCommentDisplay.appendChild(hr);
+      }
+      const textNode = document.createTextNode(c);
+      existingCommentDisplay.appendChild(textNode);
+    });
+    existingCommentSection.style.display = "block";
+  } else {
+    existingCommentDisplay.innerHTML = "";
+    existingCommentSection.style.display = "none";
+  }
+}
+
 async function checkDuplicate(title) {
   try {
     const res = await chrome.runtime.sendMessage({ type: "CHECK_DUPLICATE", asin: currentAsin, title });
@@ -217,88 +254,99 @@ async function checkDuplicate(title) {
         currentStatus = res.status;
         renderStatus();
       }
-      if (res.comment !== undefined) {
-        commentEl.value = res.comment;
-        loadedComment = res.comment;
-      }
+      // 既存コメントは読み取り専用エリアに表示（新規入力欄には入れない）
+      showExistingComments(res.comment || "");
 
       duplicateWarning.style.display = "block";
-      candidatesWarning.style.display = "none";
       hasCover = res.hasCover || false;
       existingFiles = res.existingFiles || [];
+
+      // 完全一致時でも類似候補があれば表示
+      renderCandidatesList(res.candidates || []);
     } else if (res?.ok && res.candidates && res.candidates.length > 0) {
-      // 候補リストの表示
+      // 候補リストのみの表示（完全一致なし）
       existingPageId = null;
       duplicateWarning.style.display = "none";
       hasCover = false;
       existingFiles = [];
+      showExistingComments("");
 
-      candidatesList.innerHTML = "";
-      res.candidates.forEach(c => {
-        const li = document.createElement("li");
-        li.className = "candidate-item";
-
-        const a = document.createElement("a");
-        a.href = c.url;
-        a.target = "_blank";
-        a.textContent = c.title || "（タイトル不明）";
-
-        const useBtn = document.createElement("button");
-        useBtn.className = "candidate-use-btn";
-        useBtn.textContent = "これを使う";
-        useBtn.onclick = async () => {
-          existingPageId = c.pageId;
-          hasCover = c.hasCover || false;
-          existingFiles = c.existingFiles || [];
-
-          const linkEl = duplicateWarning.querySelector("#duplicateLink");
-          if (linkEl) linkEl.href = c.url;
-          const textNode = duplicateWarning.firstChild;
-          if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-            textNode.textContent = "⚠️ すでに登録されています：";
-          }
-
-          if (c.rating !== undefined) { currentRating = c.rating; updateStars(); }
-          if (c.tags) { tags = c.tags; renderTags(); }
-          if (c.description) noteEl.value = c.description;
-          if (c.director) extractedData.director = c.director;
-          if (c.date) extractedData.date = c.date;
-          if (c.status) { currentStatus = c.status; renderStatus(); }
-
-          // コメントを取得して表示
-          try {
-            const commentRes = await chrome.runtime.sendMessage({ type: "GET_PAGE_COMMENTS", pageId: c.pageId });
-            if (commentRes?.ok && commentRes.comment !== undefined) {
-              commentEl.value = commentRes.comment;
-              loadedComment = commentRes.comment;
-            }
-          } catch (_) {}
-
-          duplicateWarning.style.display = "block";
-          candidatesWarning.style.display = "none";
-        };
-
-        li.appendChild(a);
-        li.appendChild(useBtn);
-        candidatesList.appendChild(li);
-      });
-
-      candidatesWarning.style.display = "block";
+      renderCandidatesList(res.candidates);
     } else {
       existingPageId = null;
       duplicateWarning.style.display = "none";
-      candidatesWarning.style.display = "none";
       hasCover = false;
       existingFiles = [];
-      loadedComment = "";
+      showExistingComments("");
+      renderCandidatesList([]);
     }
   } catch (e) {
     console.error("重複チェックエラー:", e);
     existingPageId = null;
     duplicateWarning.style.display = "none";
-    candidatesWarning.style.display = "none";
-    loadedComment = "";
+    showExistingComments("");
+    renderCandidatesList([]);
   }
+}
+
+// 候補リストの描画
+function renderCandidatesList(candidates) {
+  if (!candidates || candidates.length === 0) {
+    candidatesWarning.style.display = "none";
+    candidatesList.innerHTML = "";
+    return;
+  }
+
+  candidatesList.innerHTML = "";
+  candidates.forEach(c => {
+    const li = document.createElement("li");
+    li.className = "candidate-item";
+
+    const a = document.createElement("a");
+    a.href = c.url;
+    a.target = "_blank";
+    a.textContent = c.title || "（タイトル不明）";
+
+    const useBtn = document.createElement("button");
+    useBtn.className = "candidate-use-btn";
+    useBtn.textContent = "これを使う";
+    useBtn.onclick = async () => {
+      existingPageId = c.pageId;
+      hasCover = c.hasCover || false;
+      existingFiles = c.existingFiles || [];
+
+      const linkEl = duplicateWarning.querySelector("#duplicateLink");
+      if (linkEl) linkEl.href = c.url;
+      const textNode = duplicateWarning.firstChild;
+      if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+        textNode.textContent = "⚠️ すでに登録されています：";
+      }
+
+      if (c.rating !== undefined) { currentRating = c.rating; updateStars(); }
+      if (c.tags) { tags = c.tags; renderTags(); }
+      if (c.description) noteEl.value = c.description;
+      if (c.director) extractedData.director = c.director;
+      if (c.date) extractedData.date = c.date;
+      if (c.status) { currentStatus = c.status; renderStatus(); }
+
+      // コメントを取得して既存コメント表示エリアに表示
+      try {
+        const commentRes = await chrome.runtime.sendMessage({ type: "GET_PAGE_COMMENTS", pageId: c.pageId });
+        showExistingComments(commentRes?.ok ? (commentRes.comment || "") : "");
+      } catch (_) {
+        showExistingComments("");
+      }
+
+      duplicateWarning.style.display = "block";
+      candidatesWarning.style.display = "none";
+    };
+
+    li.appendChild(a);
+    li.appendChild(useBtn);
+    candidatesList.appendChild(li);
+  });
+
+  candidatesWarning.style.display = "block";
 }
 
 async function fetchNotionTags() {
@@ -621,6 +669,65 @@ settingsToggle.addEventListener("click", () => {
   settingsPanel.classList.toggle("show");
 });
 
+// ページ再読み込み（サイドパネル用）
+reloadBtn.addEventListener("click", async () => {
+  reloadBtn.classList.add("spinning");
+  try {
+    // 状態をリセット
+    existingPageId = null;
+    hasCover = false;
+    existingFiles = [];
+    currentAsin = "";
+    extractedData = {};
+    imageCandidates = [];
+    currentImageIndex = 0;
+    pageCoverIndex = -1;
+    slideIndex = 0;
+    currentRating = 0;
+    updateStars();
+    tags = [];
+    renderTags();
+    currentStatus = "";
+    renderStatus();
+    titleEl.value = "";
+    noteEl.value = "";
+    commentEl.value = "";
+    duplicateWarning.style.display = "none";
+    showExistingComments("");
+    renderCandidatesList([]);
+    carouselTrack.innerHTML = "";
+
+    // アクティブタブから再抽出
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      const msg = await chrome.tabs.sendMessage(tab.id, { type: "EXTRACT_PRIME" });
+      if (msg) {
+        handleExtractedMessage(msg);
+        statusEl.textContent = "ページを再読み込みしました";
+        statusEl.className = "status success";
+      } else {
+        statusEl.textContent = "データを取得できませんでした";
+        statusEl.className = "status error";
+      }
+    }
+  } catch (e) {
+    console.error("再読み込みエラー:", e);
+    statusEl.textContent = "再読み込みに失敗しました。Prime Videoのページを開いてください。";
+    statusEl.className = "status error";
+  } finally {
+    setTimeout(() => reloadBtn.classList.remove("spinning"), 600);
+  }
+});
+
+// 表示モード切り替え
+document.querySelectorAll('input[name="displayMode"]').forEach(radio => {
+  radio.addEventListener("change", async (e) => {
+    const newMode = e.target.value;
+    await chrome.storage.local.set({ displayMode: newMode });
+    chrome.runtime.sendMessage({ type: "SWITCH_DISPLAY_MODE", mode: newMode });
+  });
+});
+
 // レーティング値からNotionのセレクト値への変換
 function ratingToSelectName(rating) {
   const map = {
@@ -668,7 +775,7 @@ saveBtn.addEventListener("click", async () => {
     pageId: existingPageId, // 既存IDがあれば含める
     title: titleEl.value.trim(),
     description: noteEl.value.trim(),
-    comment: (commentEl.value.trim() !== loadedComment.trim()) ? commentEl.value.trim() : "",
+    comment: commentEl.value.trim(),
     url: extractedData?.url || "",
     asin: currentAsin,
     image: coverImage,

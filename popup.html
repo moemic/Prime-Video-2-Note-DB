@@ -18,6 +18,11 @@
       padding: 16px;
     }
 
+    body[data-mode="sidepanel"] {
+      width: 100%;
+      min-height: 100vh;
+    }
+
     .header {
       display: flex;
       align-items: center;
@@ -26,6 +31,7 @@
       margin-bottom: 16px;
       padding-bottom: 12px;
       border-bottom: 1px solid #3a3f47;
+      position: relative;
     }
 
     .header h1 {
@@ -208,6 +214,26 @@
     .field textarea {
       min-height: 60px;
       resize: vertical;
+    }
+
+    .existing-comment-display {
+      background: #2d3239;
+      border: 1px solid #4a5058;
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: #bbb;
+      font-size: 12px;
+      line-height: 1.6;
+      max-height: 150px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .existing-comment-display .comment-separator {
+      border: none;
+      border-top: 1px solid #3a3f47;
+      margin: 8px 0;
     }
 
     .rating-section {
@@ -482,6 +508,54 @@
       font-size: 11px;
       padding: 8px;
     }
+
+    .reload-btn {
+      background: none;
+      border: 1px solid #3a3f47;
+      border-radius: 6px;
+      color: #888;
+      font-size: 14px;
+      cursor: pointer;
+      padding: 4px 8px;
+      transition: all 0.2s;
+      position: absolute;
+      right: 0;
+    }
+
+    .reload-btn:hover {
+      color: #4db8ff;
+      border-color: #4db8ff;
+    }
+
+    .reload-btn.spinning {
+      animation: spin 0.6s linear;
+      pointer-events: none;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .mode-selector {
+      display: flex;
+      gap: 16px;
+      margin-top: 4px;
+    }
+
+    .mode-option {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #ccc;
+      cursor: pointer;
+    }
+
+    .mode-option input[type="radio"] {
+      accent-color: #4db8ff;
+      cursor: pointer;
+    }
   </style>
 </head>
 
@@ -489,6 +563,7 @@
   <div class="header">
     <span>🎬</span>
     <h1>Prime Video → Notion</h1>
+    <button id="reloadBtn" class="reload-btn" title="ページから再読み込み">🔄</button>
   </div>
 
   <div class="cover-section">
@@ -562,9 +637,14 @@
     <textarea id="note" placeholder="作品のあらすじなど（プロパティに保存されます）"></textarea>
   </div>
 
+  <div class="field" id="existingCommentSection" style="display: none;">
+    <label class="field-label">📋 既存コメント（Notionに登録済み）</label>
+    <div id="existingCommentDisplay" class="existing-comment-display"></div>
+  </div>
+
   <div class="field">
-    <label class="field-label">Comment (感想・純正コメント機能へ)</label>
-    <textarea id="comment" placeholder="あなたの感想を入力...（ページ上部のコメント欄に入ります）"></textarea>
+    <label class="field-label">✏️ 新規コメント（コネクション経由で投稿）</label>
+    <textarea id="comment" placeholder="新しい感想を入力...（ページのコメント欄に追加されます）"></textarea>
   </div>
 
   <div class="divider"></div>
@@ -590,7 +670,21 @@
       <label class="field-label">Database ID <span style="font-weight:normal; color:#666;">— Notion DB を開いた URL から取得</span></label>
       <input type="text" id="db" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
     </div>
-    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.21.0</div>
+    <div class="field" id="modeSelectorField">
+      <label class="field-label">表示モード</label>
+      <div class="mode-selector" id="modeSelector">
+        <label class="mode-option">
+          <input type="radio" name="displayMode" value="popup" checked />
+          <span>ポップアップ</span>
+        </label>
+        <label class="mode-option">
+          <input type="radio" name="displayMode" value="sidepanel" />
+          <span>サイドパネル</span>
+        </label>
+      </div>
+      <div style="font-size: 10px; color: #666; margin-top: 4px;">切り替え後、次回のアイコンクリックから有効になります。</div>
+    </div>
+    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.23.0</div>
   </div>
 
   <script src="popup.js"></script>
