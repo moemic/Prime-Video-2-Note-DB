@@ -456,15 +456,20 @@
   </div>
 
   <div class="settings-panel" id="settingsPanel">
-    <div class="field">
-      <label class="field-label">Notion Token</label>
-      <input type="password" id="token" placeholder="ntn_..." />
+    <div style="font-size: 11px; color: #aaa; margin-bottom: 14px; line-height: 1.75; background: #23282f; padding: 10px 12px; border-radius: 6px; border-left: 3px solid #4db8ff;">
+      <strong style="color: #e0e0e0;">⚙️ 初回設定が必要です</strong><br>
+      以下の2項目を入力してください。<br>
+      詳しい手順は <strong style="color: #e0e0e0;">README</strong> の「セットアップ手順」をご覧ください。
     </div>
     <div class="field">
-      <label class="field-label">Database ID</label>
-      <input type="text" id="db" placeholder="d419b59d..." />
+      <label class="field-label">Notion Token <span style="font-weight:normal; color:#666;">— notion.so/profile/integrations で取得</span></label>
+      <input type="password" id="token" placeholder="ntn_xxxxxxxxxxxxxxxx" />
     </div>
-    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.2.0</div>
+    <div class="field">
+      <label class="field-label">Database ID <span style="font-weight:normal; color:#666;">— Notion DB を開いた URL から取得</span></label>
+      <input type="text" id="db" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+    </div>
+    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.12.0</div>
   </div>
 
   <script src="popup.js"></script>

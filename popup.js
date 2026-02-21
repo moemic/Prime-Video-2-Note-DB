@@ -28,10 +28,10 @@ const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
 
 // 状態
-const VERSION = "v1.11.0";
+const VERSION = "v1.12.0";
 let currentRating = 0;
 let tags = [];
-let currentStatus = "鑑賞終了"; // 初期値
+let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）
 let statusOptionsData = []; // ステータス候補保持用
 let extractedData = {}; // nullからオブジェクトに変更
 let imageCandidates = []; // 新しい状態変数
@@ -46,14 +46,11 @@ let currentStatusType = "status"; // Notion側のプロパティ型保持用
   const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
 
   if (notionToken) tokenEl.value = notionToken;
+  if (notionDbId) dbEl.value = notionDbId;
 
-  const WRONG_ID = '6c0e197a-edbb-47c4-bc2e-00809eced2f9';
-  const CORRECT_ID = 'd419b59d-4c9c-48ad-b5b7-be5db902c1cd';
-
-  if (notionDbId && notionDbId !== WRONG_ID) {
-    dbEl.value = notionDbId;
-  } else {
-    dbEl.value = CORRECT_ID;
+  // 未設定の場合は設定パネルを自動で開いてガイドを表示
+  if (!notionToken || !notionDbId) {
+    settingsPanel.classList.add("show");
   }
 
   // 自動保存のリスナーを追加
