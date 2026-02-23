@@ -697,10 +697,43 @@ reloadBtn.addEventListener("click", async () => {
     renderCandidatesList([]);
     carouselTrack.innerHTML = "";
 
-    // アクティブタブから再抽出
+    // アクティブタブを取得
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id) {
-      const msg = await chrome.tabs.sendMessage(tab.id, { type: "EXTRACT_PRIME" });
+    if (!tab?.id) {
+      statusEl.textContent = "タブが見つかりませんでした";
+      statusEl.className = "status error";
+      return;
+    }
+
+    statusEl.textContent = "ページを再読み込み中...";
+    statusEl.className = "status loading";
+
+    // タブをハードリロードして最新データを取得（シーズン切り替え対応）
+    // SPAではscriptタグ内の埋め込みデータが切り替え後も古いままのため、
+    // ブラウザレベルで再読み込みして確実に最新ページを取得する
+    await new Promise((resolve) => {
+      const onUpdated = (tabId, changeInfo) => {
+        if (tabId === tab.id && changeInfo.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(onUpdated);
+          resolve();
+        }
+      };
+      chrome.tabs.onUpdated.addListener(onUpdated);
+      chrome.tabs.reload(tab.id, { bypassCache: true });
+      // 15秒でタイムアウト（ネットワーク遅延対策）
+      setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        resolve();
+      }, 15000);
+    });
+
+    // ページのJavaScriptが実行されてDOMが安定するまで待機
+    await new Promise(r => setTimeout(r, 1500));
+
+    // 再読み込み後のタブからデータを再抽出
+    const [freshTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (freshTab?.id) {
+      const msg = await chrome.tabs.sendMessage(freshTab.id, { type: "EXTRACT_PRIME" });
       if (msg) {
         handleExtractedMessage(msg);
         statusEl.textContent = "ページを再読み込みしました";
@@ -715,7 +748,7 @@ reloadBtn.addEventListener("click", async () => {
     statusEl.textContent = "再読み込みに失敗しました。Prime Videoのページを開いてください。";
     statusEl.className = "status error";
   } finally {
-    setTimeout(() => reloadBtn.classList.remove("spinning"), 600);
+    reloadBtn.classList.remove("spinning");
   }
 });
 
