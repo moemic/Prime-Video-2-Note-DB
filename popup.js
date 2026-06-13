@@ -23,6 +23,8 @@ const settingsToggle = document.getElementById("settingsToggle");
 const settingsPanel = document.getElementById("settingsPanel");
 const tokenEl = document.getElementById("token");
 const dbEl = document.getElementById("db");
+const verifySettingsBtn = document.getElementById("verifySettingsBtn");
+const settingsStatusEl = document.getElementById("settingsStatus");
 const saveBtn = document.getElementById("saveBtn"); // 明示的に取得
 const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
@@ -34,7 +36,7 @@ const existingCommentDisplay = document.getElementById("existingCommentDisplay")
 const reloadBtn = document.getElementById("reloadBtn");
 
 // 状態
-const VERSION = "v1.23.0";
+const VERSION = "v1.24.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）
@@ -50,6 +52,7 @@ let hasCover = false; // 既存カバーの有無
 let existingFiles = []; // 既存のファイルリスト
 let currentAsin = ""; // 作品固有のASIN
 let chipColorMap = {}; // token -> hue
+let notionOptionsRefreshTimer = null;
 
 // 初期化
 (async () => {
@@ -82,11 +85,15 @@ let chipColorMap = {}; // token -> hue
   // 自動保存のリスナーを追加
   tokenEl.addEventListener("input", () => {
     chrome.storage.local.set({ notionToken: tokenEl.value.trim() });
+    scheduleNotionOptionsRefresh();
   });
 
   dbEl.addEventListener("input", () => {
     chrome.storage.local.set({ notionDbId: dbEl.value.trim() });
+    scheduleNotionOptionsRefresh();
   });
+
+  verifySettingsBtn.addEventListener("click", verifyAndSaveNotionSettings);
 
   // タイトル変更時に重複チェックを再実行
   titleEl.addEventListener("blur", () => {
@@ -107,14 +114,91 @@ let chipColorMap = {}; // token -> hue
       }
     }
   } catch (e) {
-    console.error("抽出エラー:", e);
-    carouselTrack.innerHTML = '<div style="color:#aaa; padding:10px; font-size:11px;">抽出に失敗しました。ページをリロードして再度お試しください。</div>';
+    if (isContentScriptUnavailableError(e)) {
+      console.info("Prime Video抽出はスキップされました:", e.message);
+      showExtractionUnavailableMessage();
+    } else {
+      console.error("抽出エラー:", e);
+      carouselTrack.innerHTML = '<div style="color:#aaa; padding:10px; font-size:11px;">抽出に失敗しました。ページをリロードして再度お試しください。</div>';
+    }
   }
 
   // 既存タグ・ステータス候補の取得
   fetchNotionTags();
   fetchNotionStatusOptions();
 })();
+
+function scheduleNotionOptionsRefresh() {
+  if (notionOptionsRefreshTimer) {
+    clearTimeout(notionOptionsRefreshTimer);
+  }
+  notionOptionsRefreshTimer = setTimeout(() => {
+    notionOptionsRefreshTimer = null;
+    refreshNotionOptionsFromSettings();
+  }, 500);
+}
+
+async function refreshNotionOptionsFromSettings() {
+  const notionToken = tokenEl.value.trim();
+  const notionDbId = dbEl.value.trim();
+  if (!notionToken || !notionDbId) return;
+
+  await chrome.storage.local.set({ notionToken, notionDbId });
+  await Promise.all([
+    fetchNotionTags(),
+    fetchNotionStatusOptions()
+  ]);
+}
+
+function isContentScriptUnavailableError(error) {
+  return String(error?.message || error || "").includes("Receiving end does not exist");
+}
+
+function showExtractionUnavailableMessage() {
+  carouselTrack.innerHTML = '<div style="color:#aaa; padding:10px; font-size:11px;">Prime Videoの作品ページを開いてリロードすると、作品情報を抽出できます。Settingsの接続確認はこのまま使えます。</div>';
+}
+
+async function verifyAndSaveNotionSettings() {
+  const notionToken = tokenEl.value.trim();
+  const notionDbId = dbEl.value.trim();
+
+  if (!notionToken || !notionDbId) {
+    settingsStatusEl.textContent = "Notion Access Token と Database ID を入力してください";
+    settingsStatusEl.className = "status error";
+    return;
+  }
+
+  verifySettingsBtn.disabled = true;
+  settingsStatusEl.textContent = "接続確認中...";
+  settingsStatusEl.className = "status loading";
+
+  try {
+    await chrome.storage.local.set({ notionToken, notionDbId });
+    const res = await chrome.runtime.sendMessage({
+      type: "VERIFY_NOTION_SETTINGS",
+      notionToken,
+      notionDbId
+    });
+
+    if (!res?.ok) {
+      throw new Error(res?.error || "接続確認に失敗しました");
+    }
+
+    renderSuggestedTags(res.tags || []);
+    currentStatusType = res.statusType || "status";
+    statusOptionsData = res.statuses || [];
+    renderSuggestedStatuses();
+    renderStatus();
+
+    settingsStatusEl.textContent = `接続確認済み: タグ ${res.tags?.length || 0}件 / ステータス ${res.statuses?.length || 0}件を取得しました`;
+    settingsStatusEl.className = "status success";
+  } catch (e) {
+    settingsStatusEl.textContent = `接続確認失敗: ${e.message}`;
+    settingsStatusEl.className = "status error";
+  } finally {
+    verifySettingsBtn.disabled = false;
+  }
+}
 
 function normalizeTokenKey(token) {
   return String(token || "").trim().toLowerCase();
@@ -354,9 +438,12 @@ async function fetchNotionTags() {
     const res = await chrome.runtime.sendMessage({ type: "GET_NOTION_TAGS" });
     if (res?.ok && res.tags) {
       renderSuggestedTags(res.tags);
+    } else if (res?.error && res.error !== "Settings missing") {
+      suggestedTagsContainer.textContent = `タグ取得失敗: ${res.error}`;
     }
   } catch (e) {
     console.error("タグ取得エラー:", e);
+    suggestedTagsContainer.textContent = `タグ取得失敗: ${e.message}`;
   }
 }
 
@@ -389,9 +476,12 @@ async function fetchNotionStatusOptions() {
       statusOptionsData = res.options;
       renderSuggestedStatuses();
       renderStatus();
+    } else if (res?.error && res.error !== "Settings missing") {
+      suggestedStatusesContainer.textContent = `ステータス取得失敗: ${res.error}`;
     }
   } catch (e) {
     console.error("ステータス候補取得エラー:", e);
+    suggestedStatusesContainer.textContent = `ステータス取得失敗: ${e.message}`;
   }
 }
 
@@ -744,8 +834,13 @@ reloadBtn.addEventListener("click", async () => {
       }
     }
   } catch (e) {
-    console.error("再読み込みエラー:", e);
-    statusEl.textContent = "再読み込みに失敗しました。Prime Videoのページを開いてください。";
+    if (isContentScriptUnavailableError(e)) {
+      console.info("Prime Video再抽出はスキップされました:", e.message);
+      showExtractionUnavailableMessage();
+    } else {
+      console.error("再読み込みエラー:", e);
+    }
+    statusEl.textContent = "Prime Videoの作品ページを開いて、ページをリロードしてください。";
     statusEl.className = "status error";
   } finally {
     reloadBtn.classList.remove("spinning");
@@ -784,7 +879,7 @@ saveBtn.addEventListener("click", async () => {
   const notionDbId = dbEl.value.trim();
 
   if (!notionToken || !notionDbId) {
-    statusEl.textContent = "TokenとDatabase IDを設定してください";
+    statusEl.textContent = "Notion Access Token と Database ID を設定してください";
     statusEl.className = "status error";
     saveBtn.disabled = false;
     settingsPanel.classList.add("show");

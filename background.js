@@ -450,6 +450,80 @@ async function getNotionStatusOptions({ notionToken, notionDbId }) {
     return { type: "status", options: [] };
 }
 
+async function getNotionDatabaseOptions({ notionToken, notionDbId }) {
+    const res = await notionFetch(`https://api.notion.com/v1/databases/${notionDbId}`, {
+        method: "GET",
+        headers: {
+            "Authorization": `Bearer ${notionToken}`,
+            "Notion-Version": NOTION_VERSION
+        }
+    });
+
+    if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || `${res.status} ${res.statusText}`);
+    }
+
+    const db = await res.json();
+    const tags = new Set();
+    const statuses = new Map();
+    let statusType = "status";
+
+    const genreProperty = db.properties["ジャンル"];
+    if (genreProperty?.multi_select?.options) {
+        genreProperty.multi_select.options.forEach(opt => {
+            if (opt.name) tags.add(opt.name);
+        });
+    }
+
+    const statusProperty = db.properties["ステータス"];
+    if (statusProperty?.status?.options) {
+        statusType = "status";
+        statusProperty.status.options.forEach(opt => {
+            if (opt.name) statuses.set(opt.name, { name: opt.name, color: opt.color });
+        });
+    } else if (statusProperty?.select?.options) {
+        statusType = "select";
+        statusProperty.select.options.forEach(opt => {
+            if (opt.name) statuses.set(opt.name, { name: opt.name, color: opt.color });
+        });
+    }
+
+    let cursor = undefined;
+    let scannedPages = 0;
+    while (scannedPages < MAX_CANDIDATE_SCAN_PAGES) {
+        const data = await queryNotionDatabase({
+            notionToken,
+            notionDbId,
+            pageSize: QUERY_PAGE_SIZE,
+            startCursor: cursor
+        });
+
+        (data.results || []).forEach(page => {
+            const props = page.properties || {};
+            (props["ジャンル"]?.multi_select || []).forEach(tag => {
+                if (tag.name) tags.add(tag.name);
+            });
+
+            const statusName = props["ステータス"]?.status?.name || props["ステータス"]?.select?.name || "";
+            const statusColor = props["ステータス"]?.status?.color || props["ステータス"]?.select?.color || "default";
+            if (statusName && !statuses.has(statusName)) {
+                statuses.set(statusName, { name: statusName, color: statusColor });
+            }
+        });
+
+        scannedPages++;
+        if (!data.has_more || !data.next_cursor) break;
+        cursor = data.next_cursor;
+    }
+
+    return {
+        tags: Array.from(tags).sort((a, b) => a.localeCompare(b, "ja")),
+        statusType,
+        statuses: Array.from(statuses.values()).sort((a, b) => a.name.localeCompare(b.name, "ja"))
+    };
+}
+
 function buildExistingData(page) {
     const props = page.properties;
     const title = props["Name"]?.title ? props["Name"].title.map(t => t.plain_text).join("") : "";
@@ -776,6 +850,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 sendResponse({ ok: true, ...result });
             } catch (e) {
                 console.error("Notion Status Error:", e);
+                sendResponse({ ok: false, error: String(e.message || e) });
+            }
+        })();
+        return true;
+    }
+
+    if (msg?.type === "VERIFY_NOTION_SETTINGS") {
+        (async () => {
+            const notionToken = String(msg.notionToken || "").trim();
+            const notionDbId = String(msg.notionDbId || "").trim();
+            if (!notionToken || !notionDbId) {
+                sendResponse({ ok: false, error: "Notion Access Token と Database ID を入力してください" });
+                return;
+            }
+            try {
+                const result = await getNotionDatabaseOptions({ notionToken, notionDbId });
+                sendResponse({ ok: true, ...result });
+            } catch (e) {
+                console.error("Notion Settings Verification Error:", e);
                 sendResponse({ ok: false, error: String(e.message || e) });
             }
         })();
