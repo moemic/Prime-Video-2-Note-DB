@@ -512,7 +512,14 @@
       padding: 8px;
     }
 
-    .reload-btn {
+    .header-actions {
+      display: flex;
+      gap: 6px;
+      position: absolute;
+      right: 0;
+    }
+
+    .header-action-btn {
       background: none;
       border: 1px solid #3a3f47;
       border-radius: 6px;
@@ -521,11 +528,9 @@
       cursor: pointer;
       padding: 4px 8px;
       transition: all 0.2s;
-      position: absolute;
-      right: 0;
     }
 
-    .reload-btn:hover {
+    .header-action-btn:hover {
       color: #4db8ff;
       border-color: #4db8ff;
     }
@@ -566,7 +571,10 @@
   <div class="header">
     <span>🎬</span>
     <h1>Prime Video → Notion</h1>
-    <button id="reloadBtn" class="reload-btn" title="ページから再読み込み">🔄</button>
+    <div class="header-actions">
+      <button id="openPrimeBtn" class="header-action-btn" title="Prime Videoを開く">🏠</button>
+      <button id="reloadBtn" class="header-action-btn reload-btn" title="ページから再読み込み">🔄</button>
+    </div>
   </div>
 
   <div class="cover-section">
@@ -689,7 +697,7 @@
       </div>
       <div style="font-size: 10px; color: #666; margin-top: 4px;">切り替え後、次回のアイコンクリックから有効になります。</div>
     </div>
-    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.28.2</div>
+    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.29.1</div>
   </div>
 
   <script src="popup.js"></script>

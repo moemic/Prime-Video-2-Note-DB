@@ -34,10 +34,12 @@ const candidatesWarning = document.getElementById("candidatesWarning");
 const candidatesList = document.getElementById("candidatesList");
 const existingCommentSection = document.getElementById("existingCommentSection");
 const existingCommentDisplay = document.getElementById("existingCommentDisplay");
+const openPrimeBtn = document.getElementById("openPrimeBtn");
 const reloadBtn = document.getElementById("reloadBtn");
 
 // 状態
-const VERSION = "v1.28.2";
+const VERSION = "v1.29.1";
+const PRIME_VIDEO_STOREFRONT_URL = "https://www.amazon.co.jp/gp/video/storefront";
 let currentRating = 0;
 let tags = [];
 let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）
@@ -958,6 +960,10 @@ function updateStars() {
 // 設定パネルのトグル
 settingsToggle.addEventListener("click", () => {
   settingsPanel.classList.toggle("show");
+});
+
+openPrimeBtn.addEventListener("click", () => {
+  chrome.tabs.create({ url: PRIME_VIDEO_STOREFRONT_URL });
 });
 
 // ページ再読み込み（サイドパネル用）
