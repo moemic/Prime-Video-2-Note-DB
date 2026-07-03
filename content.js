@@ -493,5 +493,3 @@ function notifyPrimeLocationChanged() {
 window.addEventListener("popstate", () => {
     setTimeout(notifyPrimeLocationChanged, 100);
 });
-
-setInterval(notifyPrimeLocationChanged, 1000);

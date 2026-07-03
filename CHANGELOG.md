@@ -2,6 +2,10 @@
 
 すべての主要な変更と新機能の履歴をここに記録します。
 
+## [1.28.2] - 2026-07-03
+### Changed
+- **ページ切替検知の負荷を軽減**: Prime Video のURL変更検知から1秒ごとのポーリングを削除し、`pushState`、`replaceState`、`popstate` の履歴イベント検知だけを使うようにしました。
+
 ## [1.28.1] - 2026-07-03
 ### Fixed
 - **SPA遷移後の画像再取得を改善**: 現在作品のASIN、URL上の作品ID、タイトルに一致するscript内画像を優先し、前作品の `packshot`、`titleshot`、`heroshot`、`covershot` が残りにくいようにしました。

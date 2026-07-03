@@ -37,7 +37,7 @@ const existingCommentDisplay = document.getElementById("existingCommentDisplay")
 const reloadBtn = document.getElementById("reloadBtn");
 
 // 状態
-const VERSION = "v1.28.1";
+const VERSION = "v1.28.2";
 let currentRating = 0;
 let tags = [];
 let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）
