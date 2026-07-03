@@ -37,7 +37,7 @@ const existingCommentDisplay = document.getElementById("existingCommentDisplay")
 const reloadBtn = document.getElementById("reloadBtn");
 
 // 状態
-const VERSION = "v1.28.0";
+const VERSION = "v1.28.1";
 let currentRating = 0;
 let tags = [];
 let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）
@@ -622,6 +622,7 @@ function scheduleAutoExtractFromPageChange(url) {
       statusEl.textContent = "ページ変更を検出しました。情報を取得中...";
       statusEl.className = "status loading";
       resetPageStateForNewExtraction();
+      carouselTrack.innerHTML = '<div style="color:#aaa; padding:10px;">画像を取得中...</div>';
       lastExtractedPageKey = url || "";
 
       const msg = await extractPrimeFromActiveTab({ retries: 8, delayMs: 700 });

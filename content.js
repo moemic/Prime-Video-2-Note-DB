@@ -21,16 +21,57 @@ function tryDomText(selectors) {
     return "";
 }
 
+function normalizeImageHint(value) {
+    return (value || "")
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/^amazon\.co\.jp[:：]\s*/, "")
+        .replace(/\s*\|\s*prime video$/, "")
+        .replace(/\s*を観る$/, "")
+        .replace(/\s+/g, " ");
+}
+
+function buildImageContextHints({ asin, url, domTitle, ogTitle, metaTitle }) {
+    const hints = new Set();
+    const push = (value) => {
+        const normalized = normalizeImageHint(value);
+        if (normalized && normalized.length >= 4) hints.add(normalized);
+    };
+
+    push(asin);
+    push(domTitle);
+    push(ogTitle);
+    push(metaTitle);
+
+    try {
+        const urlObj = new URL(url);
+        push(urlObj.searchParams.get("asin"));
+        push(urlObj.searchParams.get("gti"));
+        urlObj.pathname.split("/").forEach(part => push(part));
+    } catch (e) {
+        // URL解析失敗時は他のヒントだけで判定する
+    }
+
+    return [...hints];
+}
+
 // JSONデータからtitleshot・packshot・heroshot・covershotを抽出する
 // covershot（エピソードサムネイル）は最低優先度で追加
-function extractTargetImages() {
-    const images = [];
-    let packshot = "";
+function extractTargetImages(contextHints = []) {
+    const matchedImages = [];
+    const fallbackImages = [];
+    let matchedPackshot = "";
+    let fallbackPackshot = "";
+    const normalizedHints = contextHints.map(normalizeImageHint).filter(Boolean);
     try {
         const scripts = document.querySelectorAll('script');
         scripts.forEach(script => {
             const content = script.textContent;
             if (!content || content.length < 100) return;
+            const normalizedContent = content.toLowerCase();
+            const matchesCurrentContext = normalizedHints.some(hint => normalizedContent.includes(hint));
+            const targetImages = matchesCurrentContext ? matchedImages : fallbackImages;
 
             const normalizeEscapedUrl = (value) => {
                 return (value || "")
@@ -61,7 +102,7 @@ function extractTargetImages() {
                     const normalized = normalizeEscapedUrl(directMatch[1]);
                     if (normalized && isValidImage(normalized)) {
                         if (onFound) onFound(normalized);
-                        images.push(normalized);
+                        targetImages.push(normalized);
                     }
                 }
 
@@ -73,7 +114,7 @@ function extractTargetImages() {
                     const urls = collectUrls(block);
                     for (const url of urls) {
                         if (onFound) onFound(url);
-                        images.push(url);
+                        targetImages.push(url);
                     }
                 }
             };
@@ -84,7 +125,11 @@ function extractTargetImages() {
             // packshot（キービジュアル）- 最優先
             if (content.includes('packshot')) {
                 pushByKey("packshot", (url) => {
-                    if (!packshot) packshot = url;
+                    if (matchesCurrentContext) {
+                        if (!matchedPackshot) matchedPackshot = url;
+                    } else if (!fallbackPackshot) {
+                        fallbackPackshot = url;
+                    }
                 });
             }
 
@@ -97,8 +142,17 @@ function extractTargetImages() {
     } catch (e) {
         console.error("Image extraction error", e);
     }
-    console.debug("[Prime2Notion] image candidates", { count: images.length, packshot });
-    return { images: images.filter(isValidImage), packshot };
+    const useMatchedImages = matchedImages.length > 0;
+    const images = useMatchedImages ? matchedImages : fallbackImages;
+    const packshot = useMatchedImages ? matchedPackshot : fallbackPackshot;
+    console.debug("[Prime2Notion] image candidates", {
+        count: images.length,
+        matchedCount: matchedImages.length,
+        fallbackCount: fallbackImages.length,
+        matched: useMatchedImages,
+        packshot
+    });
+    return { images: images.filter(isValidImage), packshot, matched: useMatchedImages };
 }
 
 function isValidImage(url) {
@@ -268,14 +322,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // ---------------------------------------------------------
     // 画像候補の収集 (packshot > titleshot > heroshot > covershot の優先順)
     // ---------------------------------------------------------
-    const targetImages = extractTargetImages();
+    const imageContextHints = buildImageContextHints({ asin, url, domTitle, ogTitle, metaTitle });
+    const targetImages = extractTargetImages(imageContextHints);
     const candidates = [...targetImages.images];
     const packshotUrl = targetImages.packshot; // キービジュアル（最優先）
 
-    // フォールバック: script内に対象画像がなかった場合のみ og:image を使用
-    if (candidates.length === 0) {
-        const ogImage_ = getMeta("og:image");
-        if (ogImage_ && isValidImage(ogImage_)) candidates.push(ogImage_);
+    // SPA遷移後に古いscript画像しか取れない場合は、現在ページのOGP画像を優先する
+    const ogImage_ = getMeta("og:image");
+    if (!targetImages.matched && ogImage_ && isValidImage(ogImage_)) {
+        candidates.length = 0;
+        candidates.push(ogImage_);
+    } else if (candidates.length === 0 && ogImage_ && isValidImage(ogImage_)) {
+        candidates.push(ogImage_);
     }
 
     // ---------------------------------------------------------
