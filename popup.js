@@ -36,7 +36,7 @@ const existingCommentDisplay = document.getElementById("existingCommentDisplay")
 const reloadBtn = document.getElementById("reloadBtn");
 
 // 状態
-const VERSION = "v1.24.0";
+const VERSION = "v1.25.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）
@@ -104,14 +104,11 @@ let notionOptionsRefreshTimer = null;
 
   // ページからデータを抽出
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id) {
-      const msg = await chrome.tabs.sendMessage(tab.id, { type: "EXTRACT_PRIME" });
-      if (msg) {
-        // populateForm(extractedData); // populateFormはメッセージリスナーに統合されるため削除
-        // メッセージリスナーのロジックを直接呼び出す
-        handleExtractedMessage(msg);
-      }
+    const msg = await extractPrimeFromActiveTab({ retries: 6, delayMs: 700 });
+    if (msg) {
+      // populateForm(extractedData); // populateFormはメッセージリスナーに統合されるため削除
+      // メッセージリスナーのロジックを直接呼び出す
+      handleExtractedMessage(msg);
     }
   } catch (e) {
     if (isContentScriptUnavailableError(e)) {
@@ -127,6 +124,58 @@ let notionOptionsRefreshTimer = null;
   fetchNotionTags();
   fetchNotionStatusOptions();
 })();
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function hasPrimaryPrimeData(data) {
+  return Boolean(data?.title?.trim()) && (
+    Boolean(data?.image) ||
+    (Array.isArray(data?.images) && data.images.length > 0)
+  );
+}
+
+function scoreExtractedData(data) {
+  if (!data) return 0;
+  let score = 0;
+  if (data.title?.trim()) score += 4;
+  if (data.image) score += 3;
+  if (Array.isArray(data.images) && data.images.length > 0) score += 3;
+  if (data.description?.trim()) score += 1;
+  if (data.asin) score += 1;
+  return score;
+}
+
+async function extractPrimeFromActiveTab({ retries = 1, delayMs = 500 } = {}) {
+  let bestMessage = null;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return bestMessage;
+
+      const msg = await chrome.tabs.sendMessage(tab.id, { type: "EXTRACT_PRIME" });
+      if (scoreExtractedData(msg) > scoreExtractedData(bestMessage)) {
+        bestMessage = msg;
+      }
+      if (hasPrimaryPrimeData(msg)) {
+        return msg;
+      }
+    } catch (e) {
+      lastError = e;
+      if (isContentScriptUnavailableError(e)) throw e;
+    }
+
+    if (attempt < retries - 1) {
+      await wait(delayMs);
+    }
+  }
+
+  if (!bestMessage && lastError) throw lastError;
+  return bestMessage;
+}
 
 function scheduleNotionOptionsRefresh() {
   if (notionOptionsRefreshTimer) {
@@ -818,20 +867,17 @@ reloadBtn.addEventListener("click", async () => {
     });
 
     // ページのJavaScriptが実行されてDOMが安定するまで待機
-    await new Promise(r => setTimeout(r, 1500));
+    await wait(1500);
 
     // 再読み込み後のタブからデータを再抽出
-    const [freshTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (freshTab?.id) {
-      const msg = await chrome.tabs.sendMessage(freshTab.id, { type: "EXTRACT_PRIME" });
-      if (msg) {
-        handleExtractedMessage(msg);
-        statusEl.textContent = "ページを再読み込みしました";
-        statusEl.className = "status success";
-      } else {
-        statusEl.textContent = "データを取得できませんでした";
-        statusEl.className = "status error";
-      }
+    const msg = await extractPrimeFromActiveTab({ retries: 4, delayMs: 700 });
+    if (msg) {
+      handleExtractedMessage(msg);
+      statusEl.textContent = "ページを再読み込みしました";
+      statusEl.className = "status success";
+    } else {
+      statusEl.textContent = "データを取得できませんでした";
+      statusEl.className = "status error";
     }
   } catch (e) {
     if (isContentScriptUnavailableError(e)) {
