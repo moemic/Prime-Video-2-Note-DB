@@ -108,6 +108,13 @@ function isValidImage(url) {
     if (lower.includes("sprite")) return false;
     if (lower.includes("pixel")) return false;
     if (lower.includes("spacer")) return false;
+    if (lower.includes("logo")) return false;
+    if (lower.includes("prime-logo")) return false;
+    if (lower.includes("primevideo")) return false;
+    if (lower.includes("prime-video")) return false;
+    if (lower.includes("campaign")) return false;
+    if (lower.includes("promotion")) return false;
+    if (lower.includes("free-trial")) return false;
     if (lower.includes(".gif") && !lower.includes("og")) return false;
     return true;
 }
@@ -404,3 +411,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
     return true; // 非同期レスポンスのために true を返す
 });
+
+let lastPrimeLocation = location.href;
+
+function notifyPrimeLocationChanged() {
+    if (location.href === lastPrimeLocation) return;
+    lastPrimeLocation = location.href;
+    chrome.runtime.sendMessage({
+        type: "PRIME_PAGE_CHANGED",
+        url: location.href
+    }).catch(() => undefined);
+}
+
+["pushState", "replaceState"].forEach(methodName => {
+    const original = history[methodName];
+    history[methodName] = function (...args) {
+        const result = original.apply(this, args);
+        setTimeout(notifyPrimeLocationChanged, 100);
+        return result;
+    };
+});
+
+window.addEventListener("popstate", () => {
+    setTimeout(notifyPrimeLocationChanged, 100);
+});
+
+setInterval(notifyPrimeLocationChanged, 1000);

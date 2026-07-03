@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "check:version": "node scripts/check-version-sync.js",
+    "check:version:staged": "node scripts/check-version-sync.js --staged"
+  }
+}

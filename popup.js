@@ -10,6 +10,7 @@ const ratingStars = document.getElementById("ratingStars");
 // Carousel Elements
 const prevBtn = document.getElementById("prevBtn");
 const nextBtn = document.getElementById("nextBtn");
+const carouselViewport = document.getElementById("carouselViewport");
 const carouselTrack = document.getElementById("carouselTrack");
 const counterEl = document.getElementById("imgCounter");
 const suggestedTagsContainer = document.getElementById("suggestedTags");
@@ -36,7 +37,7 @@ const existingCommentDisplay = document.getElementById("existingCommentDisplay")
 const reloadBtn = document.getElementById("reloadBtn");
 
 // 状態
-const VERSION = "v1.25.0";
+const VERSION = "v1.28.0";
 let currentRating = 0;
 let tags = [];
 let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）
@@ -53,6 +54,9 @@ let existingFiles = []; // 既存のファイルリスト
 let currentAsin = ""; // 作品固有のASIN
 let chipColorMap = {}; // token -> hue
 let notionOptionsRefreshTimer = null;
+let lastExtractedPageKey = "";
+let autoExtractTimer = null;
+let carouselHoldTimer = null;
 
 // 初期化
 (async () => {
@@ -597,13 +601,61 @@ function renderSuggestedStatuses() {
 
 // メッセージリスナー
 chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "PRIME_PAGE_CHANGED") {
+    scheduleAutoExtractFromPageChange(msg.url);
+    return true;
+  }
+
   // 抽出完了メッセージ等のハンドリング
   handleExtractedMessage(msg);
   return true;
 });
 
+function scheduleAutoExtractFromPageChange(url) {
+  if (autoExtractTimer) {
+    clearTimeout(autoExtractTimer);
+  }
+
+  autoExtractTimer = setTimeout(async () => {
+    autoExtractTimer = null;
+    try {
+      statusEl.textContent = "ページ変更を検出しました。情報を取得中...";
+      statusEl.className = "status loading";
+      resetPageStateForNewExtraction();
+      lastExtractedPageKey = url || "";
+
+      const msg = await extractPrimeFromActiveTab({ retries: 8, delayMs: 700 });
+      if (msg) {
+        handleExtractedMessage(msg);
+        statusEl.textContent = "ページ情報を取得しました";
+        statusEl.className = "status success";
+      } else {
+        statusEl.textContent = "ページ情報を取得できませんでした。必要に応じて更新してください。";
+        statusEl.className = "status error";
+      }
+    } catch (e) {
+      if (isContentScriptUnavailableError(e)) {
+        showExtractionUnavailableMessage();
+      } else {
+        console.error("ページ変更後の自動抽出エラー:", e);
+        statusEl.textContent = "ページ情報を取得できませんでした。必要に応じて更新してください。";
+        statusEl.className = "status error";
+      }
+    }
+  }, 600);
+}
+
 // データ処理ハンドラ
 function handleExtractedMessage(data) {
+  if (!data) return;
+  const nextPageKey = data.asin || data.url || data.title || "";
+  if (nextPageKey && lastExtractedPageKey && nextPageKey !== lastExtractedPageKey) {
+    resetPageStateForNewExtraction();
+  }
+  if (nextPageKey) {
+    lastExtractedPageKey = nextPageKey;
+  }
+
   if (data.asin) {
     currentAsin = data.asin;
     extractedData.asin = data.asin;
@@ -628,19 +680,55 @@ function handleExtractedMessage(data) {
   if (data.url) extractedData.url = data.url;
   if (data.watched) extractedData.watched = data.watched;
 
-  // 画像候補リストの処理
-  if (data.images && data.images.length > 0) {
-    imageCandidates = data.images;
-    currentImageIndex = 0;
-  } else if (data.image) {
-    imageCandidates = [data.image];
-    currentImageIndex = 0;
-  } else {
-    // 画像がない場合でも空配列をセットして表示をクリア
-    imageCandidates = [];
-  }
+  setImageCandidates(data);
 
   updateCarousel();
+}
+
+function resetImageState() {
+  imageCandidates = [];
+  currentImageIndex = 0;
+  pageCoverIndex = -1;
+  slideIndex = 0;
+  stopCarouselHold();
+  extractedData.image = "";
+  carouselTrack.innerHTML = "";
+  carouselTrack.dataset.imageSignature = "";
+  counterEl.textContent = "0/0";
+}
+
+function resetPageStateForNewExtraction() {
+  existingPageId = null;
+  hasCover = false;
+  existingFiles = [];
+  currentAsin = "";
+  extractedData = {};
+  duplicateWarning.style.display = "none";
+  showExistingComments("");
+  renderCandidatesList([]);
+  resetImageState();
+}
+
+function setImageCandidates(data) {
+  const nextImages = Array.isArray(data.images) && data.images.length > 0
+    ? data.images
+    : (data.image ? [data.image] : []);
+  const nextSignature = nextImages.join("\n");
+
+  if (nextSignature !== imageCandidates.join("\n")) {
+    imageCandidates = nextImages;
+    currentImageIndex = 0;
+    pageCoverIndex = -1;
+    slideIndex = 0;
+    carouselTrack.innerHTML = "";
+    carouselTrack.dataset.imageSignature = "";
+  } else if (currentImageIndex >= imageCandidates.length) {
+    currentImageIndex = 0;
+  }
+
+  if (imageCandidates.length === 0) {
+    extractedData.image = "";
+  }
 }
 
 // Carousel Render & Logic
@@ -648,12 +736,15 @@ function updateCarousel() {
   if (imageCandidates.length === 0) {
     carouselTrack.innerHTML = '<div style="color:#aaa; padding:10px;">No Images</div>';
     counterEl.textContent = "0/0";
+    extractedData.image = "";
+    carouselTrack.dataset.imageSignature = "";
     return;
   }
 
   // 1. Render Images (only if needed/first time or full refresh)
-  // To avoid flicker, check if track has correct number of children
-  if (carouselTrack.childElementCount !== imageCandidates.length) {
+  // 画像枚数が同じでも別作品ならURLが変わるため、URL署名で再描画を判定する
+  const imageSignature = imageCandidates.join("\n");
+  if (carouselTrack.dataset.imageSignature !== imageSignature) {
     carouselTrack.innerHTML = '';
     imageCandidates.forEach((url, index) => {
       const img = document.createElement('img');
@@ -667,6 +758,7 @@ function updateCarousel() {
       };
       carouselTrack.appendChild(img);
     });
+    carouselTrack.dataset.imageSignature = imageSignature;
   }
 
   // 2. Update Selection Style
@@ -705,8 +797,7 @@ function selectPageCover(index) {
 const ITEM_WIDTH = 124; // 120px width + 4px gap
 
 function updateSlidePosition() {
-  // transform logic if manual sliding is preferred over scrollIntoView
-  // mixing both can be tricky. let's stick to transform for buttons
+  slideIndex = clampSlideIndex(slideIndex);
   carouselTrack.style.transform = `translateX(-${slideIndex * ITEM_WIDTH}px)`;
 
   // Button states
@@ -714,20 +805,80 @@ function updateSlidePosition() {
   // nextBtn.disabled = slideIndex >= imageCandidates.length - 3; // rough estimate
 }
 
-prevBtn.onclick = () => {
-  if (slideIndex > 0) {
-    slideIndex--;
-    updateSlidePosition();
-  }
-};
+function getMaxSlideIndex() {
+  if (imageCandidates.length <= 1) return 0;
+  const visibleItems = Math.max(1, Math.floor((carouselViewport?.clientWidth || ITEM_WIDTH) / ITEM_WIDTH));
+  return Math.max(0, imageCandidates.length - visibleItems);
+}
 
-nextBtn.onclick = () => {
-  // Don't scroll past the end
-  if (slideIndex < imageCandidates.length - 1) {
-    slideIndex++;
-    updateSlidePosition();
+function clampSlideIndex(index) {
+  return Math.min(Math.max(index, 0), getMaxSlideIndex());
+}
+
+function moveCarousel(direction) {
+  const nextIndex = clampSlideIndex(slideIndex + direction);
+  if (nextIndex === slideIndex) return false;
+  slideIndex = nextIndex;
+  updateSlidePosition();
+  return true;
+}
+
+function startCarouselHold(direction) {
+  stopCarouselHold();
+  moveCarousel(direction);
+  carouselHoldTimer = setInterval(() => {
+    if (!moveCarousel(direction)) {
+      stopCarouselHold();
+    }
+  }, 140);
+}
+
+function stopCarouselHold() {
+  if (carouselHoldTimer) {
+    clearInterval(carouselHoldTimer);
+    carouselHoldTimer = null;
   }
-};
+}
+
+function wireCarouselButton(button, direction) {
+  button.addEventListener("click", (e) => e.preventDefault());
+  button.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    startCarouselHold(direction);
+  });
+  button.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    startCarouselHold(direction);
+  }, { passive: false });
+  button.addEventListener("mouseup", stopCarouselHold);
+  button.addEventListener("mouseleave", stopCarouselHold);
+  button.addEventListener("touchend", stopCarouselHold);
+  button.addEventListener("touchcancel", stopCarouselHold);
+  button.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      moveCarousel(direction);
+    }
+  });
+}
+
+wireCarouselButton(prevBtn, -1);
+wireCarouselButton(nextBtn, 1);
+window.addEventListener("mouseup", stopCarouselHold);
+window.addEventListener("blur", stopCarouselHold);
+
+carouselViewport.addEventListener("wheel", (e) => {
+  if (imageCandidates.length <= 1) return;
+
+  const dominantDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+  if (Math.abs(dominantDelta) < 1) return;
+
+  const moved = moveCarousel(dominantDelta > 0 ? 1 : -1);
+  if (moved) {
+    e.preventDefault();
+  }
+}, { passive: false });
 
 // Initialize with empty carousel
 updateCarousel();
@@ -822,6 +973,7 @@ reloadBtn.addEventListener("click", async () => {
     currentImageIndex = 0;
     pageCoverIndex = -1;
     slideIndex = 0;
+    lastExtractedPageKey = "";
     currentRating = 0;
     updateStars();
     tags = [];
