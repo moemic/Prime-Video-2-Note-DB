@@ -38,7 +38,7 @@ const openPrimeBtn = document.getElementById("openPrimeBtn");
 const reloadBtn = document.getElementById("reloadBtn");
 
 // 状態
-const VERSION = "v1.29.1";
+const VERSION = "v1.30.0";
 const PRIME_VIDEO_STOREFRONT_URL = "https://www.amazon.co.jp/gp/video/storefront";
 let currentRating = 0;
 let tags = [];
