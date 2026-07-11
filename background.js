@@ -9,6 +9,7 @@ const NOTION_MIN_INTERVAL_MS = 350;
 const NOTION_MAX_RETRIES = 5;
 let notionQueue = Promise.resolve();
 let lastNotionRequestAt = 0;
+const hallOfFameSchemaReady = new Set();
 
 // ==========================================
 // 表示モード管理（ポップアップ / サイドパネル）
@@ -178,6 +179,49 @@ async function notionFetch(url, options = {}, retries = NOTION_MAX_RETRIES) {
     return notionFetch(url, options, retries - 1);
 }
 
+async function ensureHallOfFameProperty({ notionToken, notionDbId }) {
+    if (hallOfFameSchemaReady.has(notionDbId)) return;
+
+    const headers = {
+        "Authorization": `Bearer ${notionToken}`,
+        "Notion-Version": NOTION_VERSION,
+        "Content-Type": "application/json"
+    };
+    const databaseUrl = `https://api.notion.com/v1/databases/${notionDbId}`;
+    const getRes = await notionFetch(databaseUrl, { method: "GET", headers });
+    if (!getRes.ok) {
+        const errorData = await getRes.json();
+        throw new Error(errorData.message || "Notionデータベースを確認できませんでした");
+    }
+
+    const database = await getRes.json();
+    const property = database.properties?.["殿堂入り"];
+    if (property && property.type !== "checkbox") {
+        throw new Error("Notionの「殿堂入り」プロパティをチェックボックス型にしてください");
+    }
+    const categoryProperty = database.properties?.["カテゴリ"];
+    if (categoryProperty && categoryProperty.type !== "multi_select") {
+        throw new Error("Notionの「カテゴリ」プロパティをマルチセレクト型にしてください");
+    }
+
+    if (!property || !categoryProperty) {
+        const properties = {};
+        if (!property) properties["殿堂入り"] = { checkbox: {} };
+        if (!categoryProperty) properties["カテゴリ"] = { multi_select: {} };
+        const patchRes = await notionFetch(databaseUrl, {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({ properties })
+        });
+        if (!patchRes.ok) {
+            const errorData = await patchRes.json();
+            throw new Error(errorData.message || "Notionに「殿堂入り」プロパティを作成できませんでした");
+        }
+    }
+
+    hallOfFameSchemaReady.add(notionDbId);
+}
+
 function buildMergedImageFiles(payload) {
     let allImages = [];
 
@@ -222,6 +266,7 @@ function buildMergedImageFiles(payload) {
 }
 
 async function createNotionPage({ notionToken, notionDbId, payload }) {
+    await ensureHallOfFameProperty({ notionToken, notionDbId });
     const pageId = payload.pageId; // 既存IDがあれば更新
     const method = pageId ? "PATCH" : "POST";
     const url = pageId ? `https://api.notion.com/v1/pages/${pageId}` : "https://api.notion.com/v1/pages";
@@ -232,7 +277,8 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
         "URL": { "url": payload.url || null },
         "概要": { "rich_text": [{ "text": { "content": trimNotionText(payload.description || "") } }] },
         "監督": { "rich_text": [{ "text": { "content": trimNotionText(payload.director || "") } }] },
-        "日付": { "date": { "start": payload.date || new Date().toISOString().split('T')[0] } }
+        "日付": { "date": { "start": payload.date || new Date().toISOString().split('T')[0] } },
+        "殿堂入り": { "checkbox": Boolean(payload.hallOfFame) }
     };
 
     // ASINを保存（作品固有の管理番号）
@@ -269,6 +315,10 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     } else if (pageId) {
         properties["ジャンル"] = { "multi_select": [] };
     }
+
+    properties["カテゴリ"] = {
+        "multi_select": (payload.categories || []).map(category => ({ "name": trimNotionText(category) }))
+    };
 
     // レーティングを「オススメ度」（select）に入れる
     if (payload.rating && payload.rating > 0) {
@@ -541,7 +591,9 @@ function buildExistingData(page) {
         url: buildNotionPageUrl(page),
         title: title,
         rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
+        hallOfFame: Boolean(props["殿堂入り"]?.checkbox),
         tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
+        categories: props["カテゴリ"]?.multi_select ? props["カテゴリ"].multi_select.map(t => t.name) : [],
         description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
         director: props["監督"]?.rich_text ? props["監督"].rich_text.map(t => t.plain_text).join("") : "",
         date: props["日付"]?.date ? props["日付"].date.start : "",

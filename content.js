@@ -206,6 +206,50 @@ function removeAmazonPromotionText(text) {
     return cleaned.replace(/\s+/g, " ").trim();
 }
 
+const TITLE_PROVIDER_NAMES = ["TBSオンデマンド", "dアニストア"];
+
+function removeTitleProviderTags(title) {
+    let cleaned = title;
+    for (const provider of TITLE_PROVIDER_NAMES) {
+        const escaped = provider.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        cleaned = cleaned.replace(new RegExp(`(?:【\\s*${escaped}\\s*】|[（(]\\s*${escaped}\\s*[）)])`, "gi"), " ");
+    }
+    return cleaned;
+}
+
+function extractPrimeCategories() {
+    const categories = new Set();
+    const add = value => {
+        const text = String(value || "").replace(/\\u0026/g, "&").replace(/\s+/g, " ").trim();
+        if (!text || text.length > 40 || /^https?:/i.test(text)) return;
+        if (/^(genre|genres|category|categories)$/i.test(text)) return;
+        categories.add(text);
+    };
+
+    document.querySelectorAll([
+        "[data-automation-id='genres'] a",
+        "[data-testid='genres'] a",
+        "a[href*='/genre/']",
+        "a[href*='genres=']"
+    ].join(",")).forEach(element => add(element.textContent));
+
+    document.querySelectorAll("script").forEach(script => {
+        const content = script.textContent || "";
+        if (!content.includes("genre") && !content.includes("categor")) return;
+        const blocks = content.match(/"(?:genres|categories)"\s*:\s*\[[\s\S]{0,1500}?\]/gi) || [];
+        blocks.forEach(block => {
+            const namedValues = [...block.matchAll(/"(?:text|label|name)"\s*:\s*"([^"\\]+)"/gi)];
+            if (namedValues.length > 0) {
+                namedValues.forEach(match => add(match[1]));
+            } else {
+                [...block.matchAll(/"([^"\\]+)"/g)].slice(1).forEach(match => add(match[1]));
+            }
+        });
+    });
+
+    return [...categories];
+}
+
 // タイトルの正準化（normalize）
 // 表記揺れを行い、、DB重複チェックの精度を向上
 function normalizeTitle(rawTitle) {
@@ -235,6 +279,8 @@ function cleanTitle(rawTitle) {
     let title = rawTitle.trim();
     // プレフィックス除去
     title = title.replace(/^Amazon\.co\.jp[:：]\s*/, "");
+    // 作品名に混ざる既知の配信元タグだけを除去
+    title = removeTitleProviderTags(title);
     // Prime Videoの仕様変更で付加される視聴案内を末尾だけから除去
     title = title.replace(/\s*を(?:オンラインで)?(?:視聴|観る)\s*(?:[-–—|]\s*Prime Video)?\s*$/, "");
     // 視聴案内がない従来形式のPrime Video表記も除去
@@ -453,6 +499,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             description: pickLongest(ogDesc, getMeta("description"), domDesc),
             director: director,
             releaseYear: releaseYear,
+            categories: extractPrimeCategories(),
             asin: asin,
             url,
             image,

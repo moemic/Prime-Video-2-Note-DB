@@ -5,7 +5,10 @@ const noteEl = document.getElementById("note");
 const commentEl = document.getElementById("comment");
 const tagInput = document.getElementById("tagInput");
 const tagsContainer = document.getElementById("tagsContainer");
+const categoryInput = document.getElementById("categoryInput");
+const categoriesContainer = document.getElementById("categoriesContainer");
 const ratingStars = document.getElementById("ratingStars");
+const hallOfFameEl = document.getElementById("hallOfFame");
 
 // Carousel Elements
 const prevBtn = document.getElementById("prevBtn");
@@ -47,10 +50,11 @@ const imagePreviewPrev = document.getElementById("imagePreviewPrev");
 const imagePreviewNext = document.getElementById("imagePreviewNext");
 
 // 状態
-const VERSION = "v1.34.1";
+const VERSION = "v1.36.0";
 const PRIME_VIDEO_STOREFRONT_URL = "https://www.amazon.co.jp/gp/video/storefront";
 let currentRating = 0;
 let tags = [];
+let categories = [];
 let currentStatus = ""; // 初期値なし（Notionの選択肢に依存）
 let statusOptionsData = []; // ステータス候補保持用
 let extractedData = {}; // nullからオブジェクトに変更
@@ -78,8 +82,10 @@ function makeRecordSnapshot(source) {
     description: source.description || "",
     director: source.director || "",
     tags: [...(source.tags || [])].sort().join("\n"),
+    categories: [...(source.categories || [])].sort().join("\n"),
     status: source.status || "",
     rating: Number(source.rating || 0),
+    hallOfFame: Boolean(source.hallOfFame),
   };
 }
 
@@ -95,8 +101,10 @@ function buildSaveSummary(payload, isUpdate) {
       description: "概要を変更しました",
       director: "監督名を変更しました",
       tags: "タグを変更しました",
+      categories: "カテゴリを変更しました",
       status: "ステータスを変更しました",
       rating: "オススメ度を変更しました",
+      hallOfFame: current.hallOfFame ? "殿堂入りに設定しました" : "殿堂入りを解除しました",
     };
     Object.keys(labels).forEach(key => {
       if (current[key] !== existingRecordSnapshot[key]) changes.push(labels[key]);
@@ -105,8 +113,10 @@ function buildSaveSummary(payload, isUpdate) {
     if (payload.image) changes.push(`画像${1 + (payload.images?.length || 0)}枚を登録しました`);
     if (payload.director) changes.push("監督名を登録しました");
     if (payload.tags?.length) changes.push("タグを登録しました");
+    if (payload.categories?.length) changes.push("カテゴリを登録しました");
     if (payload.status) changes.push("ステータスを登録しました");
     if (payload.rating) changes.push("オススメ度を登録しました");
+    if (payload.hallOfFame) changes.push("殿堂入りに設定しました");
   }
 
   if (changes.length === 0) changes.push(isUpdate ? "変更内容を反映しました" : "作品情報を登録しました");
@@ -472,10 +482,13 @@ async function checkDuplicate(title) {
         currentRating = res.rating;
         updateStars();
       }
+      hallOfFameEl.checked = Boolean(res.hallOfFame);
       if (res.tags) {
         tags = res.tags;
         renderTags();
       }
+      categories = res.categories || [];
+      renderCategories();
       if (res.description) {
         noteEl.value = res.description;
       }
@@ -561,7 +574,10 @@ function renderCandidatesList(candidates) {
       }
 
       if (c.rating !== undefined) { currentRating = c.rating; updateStars(); }
+      hallOfFameEl.checked = Boolean(c.hallOfFame);
       if (c.tags) { tags = c.tags; renderTags(); }
+      categories = c.categories || [];
+      renderCategories();
       if (c.description) noteEl.value = c.description;
       if (c.director) extractedData.director = c.director;
       if (c.date) extractedData.date = c.date;
@@ -781,6 +797,10 @@ function handleExtractedMessage(data) {
 
   if (data.url) extractedData.url = data.url;
   if (data.watched) extractedData.watched = data.watched;
+  if (Array.isArray(data.categories)) {
+    categories = [...new Set(data.categories)];
+    renderCategories();
+  }
 
   setImageCandidates(data);
 
@@ -805,6 +825,9 @@ function resetPageStateForNewExtraction() {
   existingRecordSnapshot = null;
   hasCover = false;
   existingFiles = [];
+  categories = [];
+  renderCategories();
+  hallOfFameEl.checked = false;
   currentAsin = "";
   extractedData = {};
   duplicateWarning.style.display = "none";
@@ -1076,6 +1099,40 @@ function renderTags() {
   });
 }
 
+categoryInput.addEventListener("keydown", event => {
+  if (event.key === "Enter" && categoryInput.value.trim()) {
+    event.preventDefault();
+    addCategory(categoryInput.value.trim());
+    categoryInput.value = "";
+  }
+});
+
+function addCategory(text) {
+  if (!categories.includes(text)) categories.push(text);
+  renderCategories();
+}
+
+function removeCategory(text) {
+  categories = categories.filter(category => category !== text);
+  renderCategories();
+}
+
+function renderCategories() {
+  categoriesContainer.querySelectorAll(".tag").forEach(element => element.remove());
+  categories.forEach(category => {
+    const categoryEl = document.createElement("span");
+    categoryEl.className = "tag";
+    categoryEl.textContent = category;
+    const removeEl = document.createElement("span");
+    removeEl.className = "remove";
+    removeEl.textContent = "×";
+    removeEl.addEventListener("click", () => removeCategory(category));
+    categoryEl.append(" ", removeEl);
+    applyChipColor(categoryEl, category, "selected");
+    categoriesContainer.insertBefore(categoryEl, categoryInput);
+  });
+}
+
 // レーティング機能
 ratingStars.addEventListener("click", (e) => {
   if (e.target.classList.contains("star")) {
@@ -1268,7 +1325,9 @@ saveBtn.addEventListener("click", async () => {
     pageCoverImage: pageCoverImage,
     images: otherImages,
     tags: tags,
+    categories: categories,
     rating: currentRating,
+    hallOfFame: hallOfFameEl.checked,
     director: extractedData?.director || "",
     releaseYear: extractedData?.releaseYear || "",
     date: extractedData?.date || new Date().toISOString().split('T')[0],

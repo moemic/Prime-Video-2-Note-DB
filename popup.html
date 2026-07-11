@@ -320,6 +320,26 @@
       gap: 4px;
     }
 
+    .hall-of-fame-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 7px;
+      padding: 6px 10px;
+      color: #f3d98b;
+      background: rgba(218, 165, 32, 0.1);
+      border: 1px solid rgba(218, 165, 32, 0.45);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .hall-of-fame-label input {
+      accent-color: #d4a72c;
+      cursor: pointer;
+    }
+
     .star {
       font-size: 24px;
       cursor: pointer;
@@ -803,6 +823,13 @@
   </div>
 
   <div class="field">
+    <label class="field-label">Categories（Prime Videoから自動取得）</label>
+    <div class="tags-input" id="categoriesContainer">
+      <input type="text" id="categoryInput" placeholder="入力してEnterで追加" />
+    </div>
+  </div>
+
+  <div class="field">
     <label class="field-label">Status</label>
     <div class="tags-input" id="statusContainer">
       <input type="text" id="statusInput" placeholder="入力してEnterで設定" />
@@ -821,6 +848,10 @@
       <span class="star" data-value="4">★</span>
       <span class="star" data-value="5">★</span>
     </div>
+    <label class="hall-of-fame-label">
+      <input type="checkbox" id="hallOfFame">
+      <span>🏆 殿堂入り</span>
+    </label>
   </div>
 
   <div class="field">
@@ -886,7 +917,7 @@
       </div>
       <div style="font-size: 10px; color: #666; margin-top: 4px;">切り替え後、次回のアイコンクリックから有効になります。</div>
     </div>
-    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.34.1</div>
+    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.36.0</div>
   </div>
 
   <div class="image-preview" id="imagePreview" role="dialog" aria-modal="true" aria-label="画像拡大プレビュー">
