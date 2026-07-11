@@ -812,7 +812,7 @@
     </div>
   </div>
 
-  <div class="field">
+  <div class="field" id="legacyTagsField" style="display: none;">
     <label class="field-label">Tags</label>
     <div class="tags-input" id="tagsContainer">
       <input type="text" id="tagInput" placeholder="入力してEnterで追加" />
@@ -823,10 +823,11 @@
   </div>
 
   <div class="field">
-    <label class="field-label">Categories（Prime Videoから自動取得）</label>
+    <label class="field-label">カテゴリ（Prime Videoから自動取得・手動追加可能）</label>
     <div class="tags-input" id="categoriesContainer">
       <input type="text" id="categoryInput" placeholder="入力してEnterで追加" />
     </div>
+    <div class="suggested-tags" id="suggestedCategories"></div>
   </div>
 
   <div class="field">
@@ -903,6 +904,8 @@
     </div>
     <button class="save-btn" id="verifySettingsBtn" type="button">接続確認・設定保存</button>
     <p class="status" id="settingsStatus"></p>
+    <button class="save-btn" id="migrateGenreBtn" type="button" style="margin-top: 10px; background: linear-gradient(135deg, #8a6d1d, #665014);">ジャンルをカテゴリへ統合</button>
+    <p class="status" id="migrationStatus"></p>
     <div class="field" id="modeSelectorField">
       <label class="field-label">表示モード</label>
       <div class="mode-selector" id="modeSelector">
@@ -917,7 +920,7 @@
       </div>
       <div style="font-size: 10px; color: #666; margin-top: 4px;">切り替え後、次回のアイコンクリックから有効になります。</div>
     </div>
-    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.36.0</div>
+    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.37.2</div>
   </div>
 
   <div class="image-preview" id="imagePreview" role="dialog" aria-modal="true" aria-label="画像拡大プレビュー">

@@ -219,12 +219,31 @@ function removeTitleProviderTags(title) {
 
 function extractPrimeCategories() {
     const categories = new Set();
+    const isMetadata = text => /^(?:IMDb\s*)?\d+(?:\.\d+)?\s*\/\s*\d+$/i.test(text)
+        || /^\d{4}$/.test(text)
+        || /^\d+\s*シーズン$/.test(text)
+        || /^\d+\s*(?:時間|分)$/.test(text)
+        || /^[•·]$/.test(text);
     const add = value => {
         const text = String(value || "").replace(/\\u0026/g, "&").replace(/\s+/g, " ").trim();
-        if (!text || text.length > 40 || /^https?:/i.test(text)) return;
+        if (!text || text.length > 40 || /^https?:/i.test(text) || isMetadata(text)) return;
         if (/^(genre|genres|category|categories)$/i.test(text)) return;
         categories.add(text);
     };
+
+    const detailRoot = document.querySelector(".dv-node-dp-genres.jRnQrN, .dv-node-dp-genres, .prVTDY");
+
+    if (detailRoot) {
+        detailRoot.querySelectorAll("a, span, strong, b").forEach(element => {
+            if (element.children.length > 0) return;
+            const text = element.textContent?.trim() || "";
+            add(text);
+        });
+        if (/[•·]/.test(detailRoot.textContent || "")) {
+            detailRoot.textContent.split(/[•·]/).forEach(add);
+        }
+        return [...categories];
+    }
 
     document.querySelectorAll([
         "[data-automation-id='genres'] a",
@@ -232,20 +251,6 @@ function extractPrimeCategories() {
         "a[href*='/genre/']",
         "a[href*='genres=']"
     ].join(",")).forEach(element => add(element.textContent));
-
-    document.querySelectorAll("script").forEach(script => {
-        const content = script.textContent || "";
-        if (!content.includes("genre") && !content.includes("categor")) return;
-        const blocks = content.match(/"(?:genres|categories)"\s*:\s*\[[\s\S]{0,1500}?\]/gi) || [];
-        blocks.forEach(block => {
-            const namedValues = [...block.matchAll(/"(?:text|label|name)"\s*:\s*"([^"\\]+)"/gi)];
-            if (namedValues.length > 0) {
-                namedValues.forEach(match => add(match[1]));
-            } else {
-                [...block.matchAll(/"([^"\\]+)"/g)].slice(1).forEach(match => add(match[1]));
-            }
-        });
-    });
 
     return [...categories];
 }

@@ -308,14 +308,6 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
     }
 
     // タグを「ジャンル」（multi_select）に入れる
-    if (payload.tags && payload.tags.length > 0) {
-        properties["ジャンル"] = {
-            "multi_select": payload.tags.map(tag => ({ "name": tag }))
-        };
-    } else if (pageId) {
-        properties["ジャンル"] = { "multi_select": [] };
-    }
-
     properties["カテゴリ"] = {
         "multi_select": (payload.categories || []).map(category => ({ "name": trimNotionText(category) }))
     };
@@ -524,6 +516,7 @@ async function getNotionDatabaseOptions({ notionToken, notionDbId }) {
 
     const db = await res.json();
     const tags = new Set();
+    const categories = new Set();
     const statuses = new Map();
     let statusType = "status";
 
@@ -532,6 +525,10 @@ async function getNotionDatabaseOptions({ notionToken, notionDbId }) {
         genreProperty.multi_select.options.forEach(opt => {
             if (opt.name) tags.add(opt.name);
         });
+    }
+    const categoryProperty = db.properties["カテゴリ"];
+    if (categoryProperty?.multi_select?.options) {
+        categoryProperty.multi_select.options.forEach(opt => { if (opt.name) categories.add(opt.name); });
     }
 
     const statusProperty = db.properties["ステータス"];
@@ -562,6 +559,9 @@ async function getNotionDatabaseOptions({ notionToken, notionDbId }) {
             (props["ジャンル"]?.multi_select || []).forEach(tag => {
                 if (tag.name) tags.add(tag.name);
             });
+            (props["カテゴリ"]?.multi_select || []).forEach(category => {
+                if (category.name) categories.add(category.name);
+            });
 
             const statusName = props["ステータス"]?.status?.name || props["ステータス"]?.select?.name || "";
             const statusColor = props["ステータス"]?.status?.color || props["ステータス"]?.select?.color || "default";
@@ -577,6 +577,7 @@ async function getNotionDatabaseOptions({ notionToken, notionDbId }) {
 
     return {
         tags: Array.from(tags).sort((a, b) => a.localeCompare(b, "ja")),
+        categories: Array.from(categories).sort((a, b) => a.localeCompare(b, "ja")),
         statusType,
         statuses: Array.from(statuses.values()).sort((a, b) => a.name.localeCompare(b.name, "ja"))
     };
@@ -768,6 +769,50 @@ async function checkDuplicateByAsin({ notionToken, notionDbId, asin, title, norm
     return { duplicate: false, candidates };
 }
 
+async function migrateGenreToCategory({ notionToken, notionDbId }) {
+    await ensureHallOfFameProperty({ notionToken, notionDbId });
+    const headers = { "Authorization": `Bearer ${notionToken}`, "Notion-Version": NOTION_VERSION, "Content-Type": "application/json" };
+    const databaseUrl = `https://api.notion.com/v1/databases/${notionDbId}`;
+    const dbRes = await notionFetch(databaseUrl, { method: "GET", headers });
+    if (!dbRes.ok) throw new Error("Notionデータベースを確認できませんでした");
+    const database = await dbRes.json();
+    if (!database.properties?.["ジャンル"]) return { alreadyMigrated: true, totalPages: 0, updatedPages: 0 };
+
+    let cursor;
+    let totalPages = 0;
+    let updatedPages = 0;
+    do {
+        const data = await queryNotionDatabase({ notionToken, notionDbId, pageSize: QUERY_PAGE_SIZE, startCursor: cursor });
+        for (const page of data.results || []) {
+            totalPages++;
+            const genre = (page.properties?.["ジャンル"]?.multi_select || []).map(item => item.name).filter(Boolean);
+            const category = (page.properties?.["カテゴリ"]?.multi_select || []).map(item => item.name).filter(Boolean);
+            const merged = [...new Set([...category, ...genre])];
+            if (genre.length === 0) continue;
+            const updateRes = await notionFetch(`https://api.notion.com/v1/pages/${page.id}`, {
+                method: "PATCH", headers,
+                body: JSON.stringify({ properties: { "カテゴリ": { multi_select: merged.map(name => ({ name })) } } })
+            });
+            if (!updateRes.ok) {
+                const errorData = await updateRes.json();
+                throw new Error(`${totalPages}件目の移行に失敗: ${errorData.message || updateRes.status}`);
+            }
+            updatedPages++;
+        }
+        cursor = data.has_more ? data.next_cursor : undefined;
+    } while (cursor);
+
+    const deleteRes = await notionFetch(databaseUrl, {
+        method: "PATCH", headers,
+        body: JSON.stringify({ properties: { "ジャンル": null } })
+    });
+    if (!deleteRes.ok) {
+        const errorData = await deleteRes.json();
+        throw new Error(`統合済みですがジャンル項目を削除できませんでした: ${errorData.message || deleteRes.status}`);
+    }
+    return { alreadyMigrated: false, totalPages, updatedPages };
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "SWITCH_DISPLAY_MODE") {
         (async () => {
@@ -829,6 +874,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             } catch (e) {
                 console.error("Notion DB Error:", e);
                 sendResponse({ ok: false, error: String(e.message || e) });
+            }
+        })();
+        return true;
+    }
+
+    if (msg?.type === "GET_NOTION_CATEGORIES") {
+        (async () => {
+            const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
+            try {
+                if (!notionToken || !notionDbId) throw new Error("Settings missing");
+                const result = await getNotionDatabaseOptions({ notionToken, notionDbId });
+                sendResponse({ ok: true, categories: result.categories || [] });
+            } catch (error) {
+                sendResponse({ ok: false, error: String(error.message || error) });
             }
         })();
         return true;
@@ -930,6 +989,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             } catch (e) {
                 console.error("Notion Settings Verification Error:", e);
                 sendResponse({ ok: false, error: String(e.message || e) });
+            }
+        })();
+        return true;
+    }
+
+    if (msg?.type === "MIGRATE_GENRE_TO_CATEGORY") {
+        (async () => {
+            const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
+            try {
+                if (!notionToken || !notionDbId) throw new Error("先にNotion設定を保存してください");
+                const result = await migrateGenreToCategory({ notionToken, notionDbId });
+                sendResponse({ ok: true, ...result });
+            } catch (error) {
+                console.error("Genre migration error:", error);
+                sendResponse({ ok: false, error: String(error.message || error) });
             }
         })();
         return true;

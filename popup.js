@@ -7,6 +7,7 @@ const tagInput = document.getElementById("tagInput");
 const tagsContainer = document.getElementById("tagsContainer");
 const categoryInput = document.getElementById("categoryInput");
 const categoriesContainer = document.getElementById("categoriesContainer");
+const suggestedCategoriesContainer = document.getElementById("suggestedCategories");
 const ratingStars = document.getElementById("ratingStars");
 const hallOfFameEl = document.getElementById("hallOfFame");
 
@@ -48,9 +49,11 @@ const imagePreviewCounter = document.getElementById("imagePreviewCounter");
 const imagePreviewClose = document.getElementById("imagePreviewClose");
 const imagePreviewPrev = document.getElementById("imagePreviewPrev");
 const imagePreviewNext = document.getElementById("imagePreviewNext");
+const migrateGenreBtn = document.getElementById("migrateGenreBtn");
+const migrationStatusEl = document.getElementById("migrationStatus");
 
 // 状態
-const VERSION = "v1.36.0";
+const VERSION = "v1.37.2";
 const PRIME_VIDEO_STOREFRONT_URL = "https://www.amazon.co.jp/gp/video/storefront";
 let currentRating = 0;
 let tags = [];
@@ -112,7 +115,6 @@ function buildSaveSummary(payload, isUpdate) {
   } else if (!isUpdate) {
     if (payload.image) changes.push(`画像${1 + (payload.images?.length || 0)}枚を登録しました`);
     if (payload.director) changes.push("監督名を登録しました");
-    if (payload.tags?.length) changes.push("タグを登録しました");
     if (payload.categories?.length) changes.push("カテゴリを登録しました");
     if (payload.status) changes.push("ステータスを登録しました");
     if (payload.rating) changes.push("オススメ度を登録しました");
@@ -184,7 +186,27 @@ let carouselHoldTimer = null;
     scheduleNotionOptionsRefresh();
   });
 
-  verifySettingsBtn.addEventListener("click", verifyAndSaveNotionSettings);
+verifySettingsBtn.addEventListener("click", verifyAndSaveNotionSettings);
+
+migrateGenreBtn.addEventListener("click", async () => {
+  if (!confirm("全ページのジャンルをカテゴリへ統合し、全件成功後にジャンル項目を削除します。実行しますか？")) return;
+  migrateGenreBtn.disabled = true;
+  migrationStatusEl.textContent = "カテゴリへ統合中...";
+  migrationStatusEl.className = "status loading";
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "MIGRATE_GENRE_TO_CATEGORY" });
+    if (!res?.ok) throw new Error(res?.error || "移行に失敗しました");
+    migrationStatusEl.textContent = res.alreadyMigrated
+      ? "ジャンルはすでに廃止されています"
+      : `移行完了: ${res.totalPages}件確認 / ${res.updatedPages}件更新`;
+    migrationStatusEl.className = "status success";
+  } catch (error) {
+    migrationStatusEl.textContent = `移行失敗: ${error.message}（ジャンル項目は削除していません）`;
+    migrationStatusEl.className = "status error";
+  } finally {
+    migrateGenreBtn.disabled = false;
+  }
+});
 
   // タイトル変更時に重複チェックを再実行
   titleEl.addEventListener("blur", () => {
@@ -213,6 +235,7 @@ let carouselHoldTimer = null;
 
   // 既存タグ・ステータス候補の取得
   fetchNotionTags();
+  fetchNotionCategories();
   fetchNotionStatusOptions();
 })();
 
@@ -325,6 +348,7 @@ async function verifyAndSaveNotionSettings() {
     }
 
     renderSuggestedTags(res.tags || []);
+    renderSuggestedCategories(res.categories || []);
     currentStatusType = res.statusType || "status";
     statusOptionsData = res.statuses || [];
     renderSuggestedStatuses();
@@ -487,7 +511,7 @@ async function checkDuplicate(title) {
         tags = res.tags;
         renderTags();
       }
-      categories = res.categories || [];
+      categories = [...new Set([...(res.categories || []), ...categories])];
       renderCategories();
       if (res.description) {
         noteEl.value = res.description;
@@ -576,7 +600,7 @@ function renderCandidatesList(candidates) {
       if (c.rating !== undefined) { currentRating = c.rating; updateStars(); }
       hallOfFameEl.checked = Boolean(c.hallOfFame);
       if (c.tags) { tags = c.tags; renderTags(); }
-      categories = c.categories || [];
+      categories = [...new Set([...(c.categories || []), ...categories])];
       renderCategories();
       if (c.description) noteEl.value = c.description;
       if (c.director) extractedData.director = c.director;
@@ -614,6 +638,15 @@ async function fetchNotionTags() {
   } catch (e) {
     console.error("タグ取得エラー:", e);
     suggestedTagsContainer.textContent = `タグ取得失敗: ${e.message}`;
+  }
+}
+
+async function fetchNotionCategories() {
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "GET_NOTION_CATEGORIES" });
+    if (res?.ok) renderSuggestedCategories(res.categories || []);
+  } catch (error) {
+    console.error("カテゴリ候補取得エラー:", error);
   }
 }
 
@@ -1131,6 +1164,22 @@ function renderCategories() {
     applyChipColor(categoryEl, category, "selected");
     categoriesContainer.insertBefore(categoryEl, categoryInput);
   });
+  suggestedCategoriesContainer.querySelectorAll(".tag-chip").forEach(chip => {
+    chip.classList.toggle("selected", categories.includes(chip.textContent));
+  });
+}
+
+function renderSuggestedCategories(options) {
+  suggestedCategoriesContainer.replaceChildren();
+  options.forEach(category => {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip";
+    chip.textContent = category;
+    applyChipColor(chip, category, "candidate");
+    chip.classList.toggle("selected", categories.includes(category));
+    chip.addEventListener("click", () => categories.includes(category) ? removeCategory(category) : addCategory(category));
+    suggestedCategoriesContainer.appendChild(chip);
+  });
 }
 
 // レーティング機能
@@ -1324,7 +1373,6 @@ saveBtn.addEventListener("click", async () => {
     image: coverImage,
     pageCoverImage: pageCoverImage,
     images: otherImages,
-    tags: tags,
     categories: categories,
     rating: currentRating,
     hallOfFame: hallOfFameEl.checked,
