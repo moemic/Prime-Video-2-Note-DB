@@ -102,6 +102,13 @@ function stableHash(input) {
     return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+function buildNotionPageUrl(page) {
+    const apiUrl = typeof page?.url === "string" ? page.url.trim() : "";
+    if (/^https:\/\/(?:www\.)?notion\.so\//i.test(apiUrl)) return apiUrl;
+    const pageId = typeof page?.id === "string" ? page.id.replace(/-/g, "").trim() : "";
+    return pageId ? `https://www.notion.so/${pageId}` : "";
+}
+
 function normalizeTitleForCompare(rawTitle) {
     if (!rawTitle) return "";
     return String(rawTitle)
@@ -174,7 +181,8 @@ async function notionFetch(url, options = {}, retries = NOTION_MAX_RETRIES) {
 function buildMergedImageFiles(payload) {
     let allImages = [];
 
-    if (payload.existingFiles && Array.isArray(payload.existingFiles)) {
+    // 完全入れ替え時は古いFilesを一切引き継がない
+    if (!payload.replaceImages && payload.existingFiles && Array.isArray(payload.existingFiles)) {
         allImages = payload.existingFiles
             .map((file, i) => ({
                 name: trimNotionFileName(file?.name, `image_${i + 1}`),
@@ -247,7 +255,7 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
 
     // サムネイルを「カバー画像」プロパティ（Files & media）に入れる
     const allImages = buildMergedImageFiles(payload);
-    if (allImages.length > 0) {
+    if (allImages.length > 0 || (pageId && payload.replaceImages)) {
         // TODO: Notionデータベースの実際のプロパティ名に置換えてください
         // 例: properties["封面画像"] や properties["Files"] 等
         properties["カバー画像"] = { "files": allImages };
@@ -359,7 +367,7 @@ async function completeNotionPage({ notionToken, payload }) {
     }
 
     const allImages = buildMergedImageFiles(payload);
-    if (allImages.length > 0) {
+    if (allImages.length > 0 || payload.replaceImages) {
         properties["カバー画像"] = { "files": allImages };
     }
 
@@ -530,7 +538,7 @@ function buildExistingData(page) {
     return {
         duplicate: true,
         pageId: page.id,
-        url: page.url,
+        url: buildNotionPageUrl(page),
         title: title,
         rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
         tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],

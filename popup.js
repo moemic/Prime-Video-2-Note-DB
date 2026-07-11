@@ -27,6 +27,9 @@ const dbEl = document.getElementById("db");
 const verifySettingsBtn = document.getElementById("verifySettingsBtn");
 const settingsStatusEl = document.getElementById("settingsStatus");
 const saveBtn = document.getElementById("saveBtn"); // 明示的に取得
+const saveFeedback = document.getElementById("saveFeedback");
+const saveFeedbackText = document.getElementById("saveFeedbackText");
+const saveFeedbackDetails = document.getElementById("saveFeedbackDetails");
 const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
 const overwriteCoverEl = document.getElementById("overwriteCover");
@@ -36,9 +39,15 @@ const existingCommentSection = document.getElementById("existingCommentSection")
 const existingCommentDisplay = document.getElementById("existingCommentDisplay");
 const openPrimeBtn = document.getElementById("openPrimeBtn");
 const reloadBtn = document.getElementById("reloadBtn");
+const imagePreview = document.getElementById("imagePreview");
+const imagePreviewImage = document.getElementById("imagePreviewImage");
+const imagePreviewCounter = document.getElementById("imagePreviewCounter");
+const imagePreviewClose = document.getElementById("imagePreviewClose");
+const imagePreviewPrev = document.getElementById("imagePreviewPrev");
+const imagePreviewNext = document.getElementById("imagePreviewNext");
 
 // 状態
-const VERSION = "v1.30.0";
+const VERSION = "v1.34.1";
 const PRIME_VIDEO_STOREFRONT_URL = "https://www.amazon.co.jp/gp/video/storefront";
 let currentRating = 0;
 let tags = [];
@@ -58,6 +67,72 @@ let chipColorMap = {}; // token -> hue
 let notionOptionsRefreshTimer = null;
 let lastExtractedPageKey = "";
 let autoExtractTimer = null;
+let saveFeedbackTimer = null;
+let existingRecordSnapshot = null;
+let imageClickTimer = null;
+let previewImageIndex = 0;
+
+function makeRecordSnapshot(source) {
+  return {
+    title: source.title || "",
+    description: source.description || "",
+    director: source.director || "",
+    tags: [...(source.tags || [])].sort().join("\n"),
+    status: source.status || "",
+    rating: Number(source.rating || 0),
+  };
+}
+
+function buildSaveSummary(payload, isUpdate) {
+  const changes = [];
+  if (payload.replaceImages) changes.push("カバー画像を入れ替えました");
+  if (payload.comment) changes.push("コメントを追加しました");
+
+  if (isUpdate && existingRecordSnapshot) {
+    const current = makeRecordSnapshot(payload);
+    const labels = {
+      title: "タイトルを変更しました",
+      description: "概要を変更しました",
+      director: "監督名を変更しました",
+      tags: "タグを変更しました",
+      status: "ステータスを変更しました",
+      rating: "オススメ度を変更しました",
+    };
+    Object.keys(labels).forEach(key => {
+      if (current[key] !== existingRecordSnapshot[key]) changes.push(labels[key]);
+    });
+  } else if (!isUpdate) {
+    if (payload.image) changes.push(`画像${1 + (payload.images?.length || 0)}枚を登録しました`);
+    if (payload.director) changes.push("監督名を登録しました");
+    if (payload.tags?.length) changes.push("タグを登録しました");
+    if (payload.status) changes.push("ステータスを登録しました");
+    if (payload.rating) changes.push("オススメ度を登録しました");
+  }
+
+  if (changes.length === 0) changes.push(isUpdate ? "変更内容を反映しました" : "作品情報を登録しました");
+  return changes.length > 3
+    ? [...changes.slice(0, 3), `ほか${changes.length - 3}件`]
+    : changes;
+}
+
+function showSaveCompletionFeedback(isUpdate, details) {
+  clearTimeout(saveFeedbackTimer);
+  saveFeedbackText.textContent = isUpdate ? "変更を保存しました！" : "Notionに保存しました！";
+  saveFeedbackDetails.replaceChildren(...details.map(detail => {
+    const item = document.createElement("li");
+    item.textContent = detail;
+    return item;
+  }));
+  saveFeedback.classList.remove("show");
+  void saveFeedback.offsetWidth;
+  saveFeedback.classList.add("show");
+  saveBtn.textContent = "✓ 完了";
+
+  saveFeedbackTimer = setTimeout(() => {
+    saveFeedback.classList.remove("show");
+    saveBtn.textContent = "Notionに保存";
+  }, 3200);
+}
 let carouselHoldTimer = null;
 
 // 初期化
@@ -355,15 +430,36 @@ function showExistingComments(commentText) {
   }
 }
 
+function getSafeNotionPageUrl(data) {
+  const apiUrl = typeof data?.url === "string" ? data.url.trim() : "";
+  if (/^https:\/\/(?:www\.)?notion\.so\//i.test(apiUrl)) return apiUrl;
+  const pageId = typeof data?.pageId === "string" ? data.pageId.replace(/-/g, "").trim() : "";
+  return pageId ? `https://www.notion.so/${pageId}` : "";
+}
+
+function configureNotionLink(linkEl, data) {
+  const notionUrl = getSafeNotionPageUrl(data);
+  if (notionUrl) {
+    linkEl.href = notionUrl;
+    linkEl.removeAttribute("aria-disabled");
+    linkEl.title = "Notionページを開く";
+    return;
+  }
+  linkEl.removeAttribute("href");
+  linkEl.setAttribute("aria-disabled", "true");
+  linkEl.title = "NotionページのURLを取得できませんでした";
+}
+
 async function checkDuplicate(title) {
   try {
     const res = await chrome.runtime.sendMessage({ type: "CHECK_DUPLICATE", asin: currentAsin, title });
     if (res?.ok && res.duplicate) {
       existingPageId = res.pageId;
+      existingRecordSnapshot = makeRecordSnapshot(res);
       // チェックボックスを残しつつテキスト部分のみ更新
       const linkEl = duplicateWarning.querySelector("#duplicateLink");
       if (linkEl) {
-        linkEl.href = res.url;
+        configureNotionLink(linkEl, res);
       }
       // テキストノードを更新（先頭のテキストのみ）
       const textNode = duplicateWarning.firstChild;
@@ -405,6 +501,7 @@ async function checkDuplicate(title) {
     } else if (res?.ok && res.candidates && res.candidates.length > 0) {
       // 候補リストのみの表示（完全一致なし）
       existingPageId = null;
+      existingRecordSnapshot = null;
       duplicateWarning.style.display = "none";
       hasCover = false;
       existingFiles = [];
@@ -413,6 +510,7 @@ async function checkDuplicate(title) {
       renderCandidatesList(res.candidates);
     } else {
       existingPageId = null;
+      existingRecordSnapshot = null;
       duplicateWarning.style.display = "none";
       hasCover = false;
       existingFiles = [];
@@ -442,7 +540,7 @@ function renderCandidatesList(candidates) {
     li.className = "candidate-item";
 
     const a = document.createElement("a");
-    a.href = c.url;
+    configureNotionLink(a, c);
     a.target = "_blank";
     a.textContent = c.title || "（タイトル不明）";
 
@@ -451,11 +549,12 @@ function renderCandidatesList(candidates) {
     useBtn.textContent = "これを使う";
     useBtn.onclick = async () => {
       existingPageId = c.pageId;
+      existingRecordSnapshot = makeRecordSnapshot(c);
       hasCover = c.hasCover || false;
       existingFiles = c.existingFiles || [];
 
       const linkEl = duplicateWarning.querySelector("#duplicateLink");
-      if (linkEl) linkEl.href = c.url;
+      if (linkEl) configureNotionLink(linkEl, c);
       const textNode = duplicateWarning.firstChild;
       if (textNode && textNode.nodeType === Node.TEXT_NODE) {
         textNode.textContent = "⚠️ すでに登録されています：";
@@ -689,6 +788,7 @@ function handleExtractedMessage(data) {
 }
 
 function resetImageState() {
+  closeImagePreview();
   imageCandidates = [];
   currentImageIndex = 0;
   pageCoverIndex = -1;
@@ -702,6 +802,7 @@ function resetImageState() {
 
 function resetPageStateForNewExtraction() {
   existingPageId = null;
+  existingRecordSnapshot = null;
   hasCover = false;
   existingFiles = [];
   currentAsin = "";
@@ -754,7 +855,15 @@ function updateCarousel() {
       img.src = url;
       img.className = 'carousel-item';
       img.dataset.index = index;
-      img.onclick = () => selectImage(index);
+      img.onclick = () => {
+        clearTimeout(imageClickTimer);
+        imageClickTimer = setTimeout(() => selectImage(index), 220);
+      };
+      img.ondblclick = (event) => {
+        event.preventDefault();
+        clearTimeout(imageClickTimer);
+        openImagePreview(index);
+      };
       img.oncontextmenu = (e) => {
         e.preventDefault();
         selectPageCover(index);
@@ -795,6 +904,46 @@ function selectPageCover(index) {
   pageCoverIndex = (pageCoverIndex === index) ? -1 : index;
   updateCarousel();
 }
+
+function renderImagePreview() {
+  if (imageCandidates.length === 0) return;
+  previewImageIndex = (previewImageIndex + imageCandidates.length) % imageCandidates.length;
+  imagePreviewImage.src = imageCandidates[previewImageIndex];
+  imagePreviewCounter.textContent = `${previewImageIndex + 1} / ${imageCandidates.length}`;
+  const hasMultipleImages = imageCandidates.length > 1;
+  imagePreviewPrev.style.display = hasMultipleImages ? "grid" : "none";
+  imagePreviewNext.style.display = hasMultipleImages ? "grid" : "none";
+}
+
+function openImagePreview(index) {
+  previewImageIndex = index;
+  renderImagePreview();
+  imagePreview.classList.add("show");
+  imagePreviewClose.focus();
+}
+
+function closeImagePreview() {
+  imagePreview.classList.remove("show");
+  imagePreviewImage.removeAttribute("src");
+}
+
+function moveImagePreview(offset) {
+  previewImageIndex += offset;
+  renderImagePreview();
+}
+
+imagePreviewClose.addEventListener("click", closeImagePreview);
+imagePreviewPrev.addEventListener("click", () => moveImagePreview(-1));
+imagePreviewNext.addEventListener("click", () => moveImagePreview(1));
+imagePreview.addEventListener("click", event => {
+  if (event.target === imagePreview) closeImagePreview();
+});
+document.addEventListener("keydown", event => {
+  if (!imagePreview.classList.contains("show")) return;
+  if (event.key === "Escape") closeImagePreview();
+  if (event.key === "ArrowLeft") moveImagePreview(-1);
+  if (event.key === "ArrowRight") moveImagePreview(1);
+});
 
 // Slide Logic
 const ITEM_WIDTH = 124; // 120px width + 4px gap
@@ -1078,6 +1227,9 @@ function ratingToSelectName(rating) {
 saveBtn.addEventListener("click", async () => {
   statusEl.textContent = "保存中...";
   statusEl.className = "status loading";
+  clearTimeout(saveFeedbackTimer);
+  saveFeedback.classList.remove("show");
+  saveBtn.textContent = "Notionに保存";
   saveBtn.disabled = true;
 
   const notionToken = tokenEl.value.trim();
@@ -1102,6 +1254,7 @@ saveBtn.addEventListener("click", async () => {
 
   // 残りの画像をファイルプロパティ用に収集
   const otherImages = imageCandidates.filter((_, i) => i !== currentImageIndex);
+  const replaceImages = Boolean(existingPageId && overwriteCoverEl.checked);
 
   // ペイロードを構築
   const payload = {
@@ -1123,6 +1276,7 @@ saveBtn.addEventListener("click", async () => {
     statusType: currentStatusType,
     hasCover: hasCover,
     overwriteCover: overwriteCoverEl.checked,
+    replaceImages: replaceImages,
     existingFiles: existingFiles,
     watched: true
   };
@@ -1132,8 +1286,13 @@ saveBtn.addEventListener("click", async () => {
     const res = await chrome.runtime.sendMessage({ type: "CREATE_NOTION_PAGE", payload });
 
     if (res?.ok) {
-      statusEl.textContent = existingPageId ? "保存（更新）完了！" : "保存完了！";
+      const isUpdate = Boolean(existingPageId);
+      const saveSummary = buildSaveSummary(payload, isUpdate);
+      statusEl.textContent = "";
       statusEl.className = "status success";
+      showSaveCompletionFeedback(isUpdate, saveSummary);
+      if (replaceImages) existingFiles = [];
+      existingRecordSnapshot = makeRecordSnapshot(payload);
       // 更新後のID（新規作成の場合）を保持する（連続保存対応）
       if (res.id) existingPageId = res.id;
     } else {

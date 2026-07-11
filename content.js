@@ -226,12 +226,7 @@ function normalizeTitle(rawTitle) {
     // 4. 末尾のスペースを削除
     title = title.replace(/\s+$/, "");
 
-    // 5. その他の不要なプレフィックスを削除
-    title = title.replace(/^Amazon\.co\.jp[:：]\s*/, "");
-    title = title.replace(/\s*\|\s*Prime Video$/, "");
-    title = title.replace(/\s*を観る$/, "");
-
-    return title.trim();
+    return cleanTitle(title);
 }
 
 // タイトルのクリーニング（Amazon宣伝文等を除去）
@@ -240,12 +235,13 @@ function cleanTitle(rawTitle) {
     let title = rawTitle.trim();
     // プレフィックス除去
     title = title.replace(/^Amazon\.co\.jp[:：]\s*/, "");
-    // サフィックス除去
-    // 先に " | Prime Video" を消す
-    title = title.replace(/\s*\|\s*Prime Video$/, "");
-    // その後に "を観る" が残っていたら消す
-    title = title.replace(/\s*を観る$/, "");
-    return title;
+    // Prime Videoの仕様変更で付加される視聴案内を末尾だけから除去
+    title = title.replace(/\s*を(?:オンラインで)?(?:視聴|観る)\s*(?:[-–—|]\s*Prime Video)?\s*$/, "");
+    // 視聴案内がない従来形式のPrime Video表記も除去
+    title = title.replace(/\s*[-–—|]\s*Prime Video\s*$/, "");
+    // シーズン情報の直前にだけ付く不自然な「の」を除去
+    title = title.replace(/の(?=シーズン\s*[0-9０-９]+\s*$)/, " ");
+    return title.replace(/\s+/g, " ").trim();
 }
 
 // 画像のファイルサイズを取得する（HEADリクエスト）
@@ -352,7 +348,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         }
 
         // 正準化タイトル（DB照合用）を生成
-        const normalizedTitle = normalizeTitle(rawTitle);
+        const normalizedTitle = normalizeTitle(finalTitle);
 
         const uniqueImages = [...new Set(candidates)];
 

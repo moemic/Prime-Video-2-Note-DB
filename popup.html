@@ -163,6 +163,80 @@
     .legend-dot.blue { background: #4db8ff; }
     .legend-dot.orange { background: #ff9800; }
 
+    .image-preview {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 38px;
+      background: rgba(8, 10, 14, 0.94);
+      backdrop-filter: blur(5px);
+    }
+
+    .image-preview.show {
+      display: flex;
+      animation: preview-fade-in 0.18s ease-out;
+    }
+
+    .image-preview-image {
+      max-width: 100%;
+      max-height: calc(100vh - 90px);
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 14px 44px rgba(0, 0, 0, 0.65);
+    }
+
+    .image-preview-close,
+    .image-preview-nav {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: rgba(50, 56, 65, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      cursor: pointer;
+    }
+
+    .image-preview-close {
+      top: 12px;
+      right: 12px;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      font-size: 22px;
+    }
+
+    .image-preview-nav {
+      top: 50%;
+      width: 30px;
+      height: 48px;
+      border-radius: 7px;
+      transform: translateY(-50%);
+      font-size: 19px;
+    }
+
+    .image-preview-prev { left: 5px; }
+    .image-preview-next { right: 5px; }
+
+    .image-preview-counter {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      padding: 4px 10px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.72);
+      border-radius: 999px;
+      font-size: 11px;
+      transform: translateX(-50%);
+    }
+
+    @keyframes preview-fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
 
     .field {
       margin-bottom: 14px;
@@ -371,6 +445,112 @@
       cursor: not-allowed;
       transform: none;
       box-shadow: none;
+    }
+
+    .save-feedback {
+      position: relative;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-height: 48px;
+      margin-top: 10px;
+      overflow: hidden;
+      color: #eafff1;
+      background: linear-gradient(135deg, rgba(28, 176, 105, 0.96), rgba(0, 126, 86, 0.96));
+      border: 1px solid rgba(126, 255, 190, 0.7);
+      border-radius: 10px;
+      box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+    }
+
+    .save-feedback.show {
+      display: flex;
+      animation: save-feedback-pop 0.55s cubic-bezier(0.2, 1.45, 0.45, 1), save-feedback-pulse 0.75s ease-out 0.2s;
+    }
+
+    .save-feedback-icon {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      width: 27px;
+      height: 27px;
+      color: #08764f;
+      background: #eafff1;
+      border-radius: 50%;
+      font-size: 18px;
+      font-weight: 900;
+      animation: save-check-pop 0.48s cubic-bezier(0.2, 1.6, 0.4, 1);
+    }
+
+    .save-feedback-text {
+      position: relative;
+      z-index: 2;
+    }
+
+    .save-feedback-details {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      margin: 0;
+      padding: 7px 10px 0;
+      border-top: 1px solid rgba(234, 255, 241, 0.28);
+      color: rgba(234, 255, 241, 0.92);
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 1.55;
+      text-align: center;
+      list-style: none;
+    }
+
+    .save-feedback-spark {
+      position: absolute;
+      left: var(--spark-x);
+      top: 50%;
+      width: 5px;
+      height: 5px;
+      background: #d7ffe9;
+      border-radius: 50%;
+      opacity: 0;
+    }
+
+    .save-feedback.show .save-feedback-spark {
+      animation: save-spark 0.75s ease-out var(--spark-delay);
+    }
+
+    @keyframes save-feedback-pop {
+      0% { opacity: 0; transform: scale(0.88) translateY(6px); }
+      65% { opacity: 1; transform: scale(1.035) translateY(-1px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    @keyframes save-feedback-pulse {
+      0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); }
+      100% { box-shadow: 0 0 0 15px rgba(52, 211, 153, 0); }
+    }
+
+    @keyframes save-check-pop {
+      0% { opacity: 0; transform: scale(0.15) rotate(-25deg); }
+      100% { opacity: 1; transform: scale(1) rotate(0); }
+    }
+
+    @keyframes save-spark {
+      0% { opacity: 0; transform: translateY(0) scale(0.4); }
+      30% { opacity: 1; }
+      100% { opacity: 0; transform: translateY(var(--spark-y)) scale(1.4); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .save-feedback.show,
+      .save-feedback-icon,
+      .save-feedback.show .save-feedback-spark {
+        animation: none;
+      }
     }
 
     .duplicate-warning {
@@ -661,6 +841,15 @@
   <div class="divider"></div>
 
   <button class="save-btn" id="saveBtn">Notionに保存</button>
+  <div class="save-feedback" id="saveFeedback" role="status" aria-live="polite">
+    <span class="save-feedback-spark" style="--spark-x: 9%; --spark-y: -19px; --spark-delay: 0.05s;"></span>
+    <span class="save-feedback-spark" style="--spark-x: 22%; --spark-y: 18px; --spark-delay: 0.14s;"></span>
+    <span class="save-feedback-spark" style="--spark-x: 72%; --spark-y: -20px; --spark-delay: 0.1s;"></span>
+    <span class="save-feedback-spark" style="--spark-x: 90%; --spark-y: 17px; --spark-delay: 0.18s;"></span>
+    <span class="save-feedback-icon" aria-hidden="true">✓</span>
+    <span class="save-feedback-text" id="saveFeedbackText">Notionに保存しました！</span>
+    <ul class="save-feedback-details" id="saveFeedbackDetails"></ul>
+  </div>
   <p class="status" id="status"></p>
 
   <div class="settings-toggle">
@@ -697,7 +886,15 @@
       </div>
       <div style="font-size: 10px; color: #666; margin-top: 4px;">切り替え後、次回のアイコンクリックから有効になります。</div>
     </div>
-    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.30.0</div>
+    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.34.1</div>
+  </div>
+
+  <div class="image-preview" id="imagePreview" role="dialog" aria-modal="true" aria-label="画像拡大プレビュー">
+    <button class="image-preview-close" id="imagePreviewClose" type="button" aria-label="閉じる">×</button>
+    <button class="image-preview-nav image-preview-prev" id="imagePreviewPrev" type="button" aria-label="前の画像">‹</button>
+    <img class="image-preview-image" id="imagePreviewImage" alt="拡大した画像候補">
+    <button class="image-preview-nav image-preview-next" id="imagePreviewNext" type="button" aria-label="次の画像">›</button>
+    <div class="image-preview-counter" id="imagePreviewCounter"></div>
   </div>
 
   <script src="popup.js"></script>
