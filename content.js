@@ -210,6 +210,7 @@ const TITLE_PROVIDER_NAMES = ["TBSオンデマンド", "dアニストア"];
 
 function removeTitleProviderTags(title) {
     let cleaned = title;
+    cleaned = cleaned.replace(/【\s*[^【】]{1,40}オンデマンド\s*】/gi, " ");
     for (const provider of TITLE_PROVIDER_NAMES) {
         const escaped = provider.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         cleaned = cleaned.replace(new RegExp(`(?:【\\s*${escaped}\\s*】|[（(]\\s*${escaped}\\s*[）)])`, "gi"), " ");

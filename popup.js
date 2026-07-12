@@ -53,7 +53,7 @@ const migrateGenreBtn = document.getElementById("migrateGenreBtn");
 const migrationStatusEl = document.getElementById("migrationStatus");
 
 // 状態
-const VERSION = "v1.37.2";
+const VERSION = "v1.38.2";
 const PRIME_VIDEO_STOREFRONT_URL = "https://www.amazon.co.jp/gp/video/storefront";
 let currentRating = 0;
 let tags = [];
@@ -78,6 +78,9 @@ let saveFeedbackTimer = null;
 let existingRecordSnapshot = null;
 let imageClickTimer = null;
 let previewImageIndex = 0;
+let autoCategories = [];
+let categoryExclusions = {};
+let categoryExclusionsChanged = false;
 
 function makeRecordSnapshot(source) {
   return {
@@ -96,6 +99,7 @@ function buildSaveSummary(payload, isUpdate) {
   const changes = [];
   if (payload.replaceImages) changes.push("カバー画像を入れ替えました");
   if (payload.comment) changes.push("コメントを追加しました");
+  if (categoryExclusionsChanged) changes.push("カテゴリの除外設定を記憶しました");
 
   if (isUpdate && existingRecordSnapshot) {
     const current = makeRecordSnapshot(payload);
@@ -153,6 +157,10 @@ let carouselHoldTimer = null;
   const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
   const { chipColorMap: storedChipColorMap } = await chrome.storage.local.get(["chipColorMap"]);
   chipColorMap = storedChipColorMap && typeof storedChipColorMap === "object" ? storedChipColorMap : {};
+  const storedExclusions = await chrome.storage.local.get(["categoryExclusions"]);
+  categoryExclusions = storedExclusions.categoryExclusions && typeof storedExclusions.categoryExclusions === "object"
+    ? storedExclusions.categoryExclusions
+    : {};
 
   // 表示モード検出 & 適用
   const { displayMode } = await chrome.storage.local.get(["displayMode"]);
@@ -831,7 +839,9 @@ function handleExtractedMessage(data) {
   if (data.url) extractedData.url = data.url;
   if (data.watched) extractedData.watched = data.watched;
   if (Array.isArray(data.categories)) {
-    categories = [...new Set(data.categories)];
+    autoCategories = [...new Set(data.categories)];
+    const excluded = new Set(categoryExclusions[currentAsin] || []);
+    categories = autoCategories.filter(category => !excluded.has(category));
     renderCategories();
   }
 
@@ -858,6 +868,8 @@ function resetPageStateForNewExtraction() {
   existingRecordSnapshot = null;
   hasCover = false;
   existingFiles = [];
+  autoCategories = [];
+  categoryExclusionsChanged = false;
   categories = [];
   renderCategories();
   hallOfFameEl.checked = false;
@@ -1142,11 +1154,22 @@ categoryInput.addEventListener("keydown", event => {
 
 function addCategory(text) {
   if (!categories.includes(text)) categories.push(text);
+  if (currentAsin && (categoryExclusions[currentAsin] || []).includes(text)) {
+    categoryExclusions[currentAsin] = categoryExclusions[currentAsin].filter(category => category !== text);
+    if (categoryExclusions[currentAsin].length === 0) delete categoryExclusions[currentAsin];
+    categoryExclusionsChanged = true;
+    chrome.storage.local.set({ categoryExclusions });
+  }
   renderCategories();
 }
 
 function removeCategory(text) {
   categories = categories.filter(category => category !== text);
+  if (currentAsin && autoCategories.includes(text)) {
+    categoryExclusions[currentAsin] = [...new Set([...(categoryExclusions[currentAsin] || []), text])];
+    categoryExclusionsChanged = true;
+    chrome.storage.local.set({ categoryExclusions });
+  }
   renderCategories();
 }
 
@@ -1400,6 +1423,7 @@ saveBtn.addEventListener("click", async () => {
       showSaveCompletionFeedback(isUpdate, saveSummary);
       if (replaceImages) existingFiles = [];
       existingRecordSnapshot = makeRecordSnapshot(payload);
+      categoryExclusionsChanged = false;
       // 更新後のID（新規作成の場合）を保持する（連続保存対応）
       if (res.id) existingPageId = res.id;
     } else {
