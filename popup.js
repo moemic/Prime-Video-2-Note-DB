@@ -53,7 +53,7 @@ const migrateGenreBtn = document.getElementById("migrateGenreBtn");
 const migrationStatusEl = document.getElementById("migrationStatus");
 
 // 状態
-const VERSION = "v1.38.2";
+const VERSION = "v1.38.3";
 const PRIME_VIDEO_STOREFRONT_URL = "https://www.amazon.co.jp/gp/video/storefront";
 let currentRating = 0;
 let tags = [];
@@ -1147,8 +1147,10 @@ function renderTags() {
 categoryInput.addEventListener("keydown", event => {
   if (event.key === "Enter" && categoryInput.value.trim()) {
     event.preventDefault();
-    addCategory(categoryInput.value.trim());
+    const category = categoryInput.value.trim();
     categoryInput.value = "";
+    addCategory(category);
+    categoryInput.focus();
   }
 });
 
