@@ -396,6 +396,7 @@
       border: 1px solid var(--chip-border, #4a5058);
       padding: 4px 10px;
       border-radius: 12px;
+      font-family: inherit;
       font-size: 11px;
       cursor: pointer;
       transition: all 0.2s;
@@ -409,6 +410,37 @@
       background: var(--chip-selected-bg, rgba(77, 184, 255, 0.15));
       color: var(--chip-selected-fg, #4db8ff);
       border-color: var(--chip-selected-border, #4db8ff);
+    }
+
+    .category-group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 9px;
+      color: #aaa;
+      font-size: 10px;
+    }
+
+    .category-group-hint {
+      color: #666;
+      font-size: 9px;
+    }
+
+    .primary-categories {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .primary-category-chip {
+      width: 100%;
+      padding: 7px 3px;
+      border-radius: 6px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .primary-category-chip.selected {
+      box-shadow: inset 0 0 0 1px rgba(77, 184, 255, 0.2);
     }
 
     .tags-input input {
@@ -575,20 +607,122 @@
 
     .duplicate-warning {
       display: none;
-      background: rgba(255, 166, 0, 0.1);
-      border: 1px solid #ffa600;
-      color: #ffa600;
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 11px;
+      background: rgba(35, 40, 47, 0.92);
+      border: 1px solid #4a5058;
+      padding: 10px;
+      border-radius: 8px;
       margin-top: 6px;
-      line-height: 1.4;
+    }
+
+    .duplicate-warning-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .duplicate-warning-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #e0e0e0;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .duplicate-warning-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #4db8ff;
+      box-shadow: 0 0 0 3px rgba(77, 184, 255, 0.12);
     }
 
     .duplicate-warning a {
-      color: #ffa600;
-      text-decoration: underline;
+      color: #4db8ff;
+      text-decoration: none;
       font-weight: 500;
+      font-size: 10px;
+    }
+
+    .duplicate-warning a:hover {
+      text-decoration: underline;
+    }
+
+    .duplicate-warning-note {
+      color: #888;
+      font-size: 10px;
+      margin-top: 3px;
+    }
+
+    .image-policy {
+      border: 0;
+      margin-top: 9px;
+    }
+
+    .image-policy legend {
+      color: #aaa;
+      font-size: 10px;
+      margin-bottom: 5px;
+    }
+
+    .image-policy-options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .image-policy-option {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .image-policy-option input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .image-policy-copy {
+      display: flex;
+      flex-direction: column;
+      min-height: 50px;
+      padding: 8px;
+      border: 1px solid #3a3f47;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.02);
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .image-policy-option:hover .image-policy-copy {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .image-policy-option input:focus-visible + .image-policy-copy {
+      outline: 2px solid #4db8ff;
+      outline-offset: 2px;
+    }
+
+    .image-policy-option input:checked + .image-policy-copy {
+      border-color: #4db8ff;
+      background: rgba(77, 184, 255, 0.1);
+    }
+
+    .image-policy-option #overwriteCover:checked + .image-policy-copy {
+      border-color: #ff9800;
+      background: rgba(255, 152, 0, 0.1);
+    }
+
+    .image-policy-label {
+      color: #e0e0e0;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .image-policy-description {
+      color: #888;
+      font-size: 9px;
+      margin-top: 2px;
     }
 
     .candidates-warning {
@@ -644,21 +778,6 @@
 
     .candidate-use-btn:hover {
       background: rgba(77, 184, 255, 0.3);
-    }
-
-    .overwrite-cover-label {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 6px;
-      cursor: pointer;
-      font-size: 11px;
-      color: #ccc;
-    }
-
-    .overwrite-cover-label input[type="checkbox"] {
-      accent-color: #4db8ff;
-      cursor: pointer;
     }
 
     .status {
@@ -800,11 +919,33 @@
     <label class="field-label">Title</label>
     <input type="text" id="title" placeholder="作品タイトル" />
     <div id="duplicateWarning" class="duplicate-warning">
-      ⚠️ すでに登録されています：<a id="duplicateLink" target="_blank">Notionを開く</a>
-      <label id="overwriteCoverLabel" class="overwrite-cover-label">
-        <input type="checkbox" id="overwriteCover" />
-        カバー画像を上書きする
-      </label>
+      <div class="duplicate-warning-header">
+        <span class="duplicate-warning-title">
+          <span class="duplicate-warning-dot" aria-hidden="true"></span>
+          Notionに登録済み
+        </span>
+        <a id="duplicateLink" target="_blank">Notionを開く ↗</a>
+      </div>
+      <p class="duplicate-warning-note">保存すると既存ページを更新します</p>
+      <fieldset class="image-policy">
+        <legend>画像の扱い</legend>
+        <div class="image-policy-options">
+          <label class="image-policy-option">
+            <input type="radio" id="preserveImages" name="imagePolicy" checked />
+            <span class="image-policy-copy">
+              <span class="image-policy-label">✓ 既存を残す</span>
+              <span class="image-policy-description">新しい画像を追加</span>
+            </span>
+          </label>
+          <label class="image-policy-option">
+            <input type="radio" id="overwriteCover" name="imagePolicy" />
+            <span class="image-policy-copy">
+              <span class="image-policy-label">↻ 入れ替える</span>
+              <span class="image-policy-description">カバーも更新</span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
     </div>
     <div id="candidatesWarning" class="candidates-warning">
       🔍 似た作品が登録されています：
@@ -823,9 +964,17 @@
   </div>
 
   <div class="field">
-    <label class="field-label">カテゴリ（Prime Videoから自動取得・手動追加可能）</label>
+    <label class="field-label">カテゴリ</label>
     <div class="tags-input" id="categoriesContainer">
       <input type="text" id="categoryInput" placeholder="入力してEnterで追加" />
+    </div>
+    <div class="category-group-header">
+      <span>主要カテゴリ</span>
+      <span class="category-group-hint">自動取得・複数選択</span>
+    </div>
+    <div class="suggested-tags primary-categories" id="primaryCategories"></div>
+    <div class="category-group-header">
+      <span>ジャンル・雰囲気</span>
     </div>
     <div class="suggested-tags" id="suggestedCategories"></div>
   </div>
@@ -905,6 +1054,7 @@
     <button class="save-btn" id="verifySettingsBtn" type="button">接続確認・設定保存</button>
     <p class="status" id="settingsStatus"></p>
     <button class="save-btn" id="migrateGenreBtn" type="button" style="margin-top: 10px; background: linear-gradient(135deg, #8a6d1d, #665014);">ジャンルをカテゴリへ統合</button>
+    <button class="save-btn" id="migrateForeignMovieBtn" type="button" style="margin-top: 10px; background: linear-gradient(135deg, #8a6d1d, #665014);">旧カテゴリ名を外国映画へ移行</button>
     <p class="status" id="migrationStatus"></p>
     <div class="field" id="modeSelectorField">
       <label class="field-label">表示モード</label>
@@ -920,7 +1070,7 @@
       </div>
       <div style="font-size: 10px; color: #666; margin-top: 4px;">切り替え後、次回のアイコンクリックから有効になります。</div>
     </div>
-    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.38.3</div>
+    <div style="font-size: 10px; color: #666; text-align: right; margin-top: 8px;">version 1.44.0</div>
   </div>
 
   <div class="image-preview" id="imagePreview" role="dialog" aria-modal="true" aria-label="画像拡大プレビュー">

@@ -1,3 +1,19 @@
+const PRIMARY_CATEGORIES = ["外国映画", "映画", "ドラマ", "アニメ"];
+const LEGACY_FOREIGN_MOVIE_CATEGORY = "海外映画";
+const FOREIGN_MOVIE_CATEGORY = "外国映画";
+
+function normalizeCategoryName(category) {
+  return category === LEGACY_FOREIGN_MOVIE_CATEGORY ? FOREIGN_MOVIE_CATEGORY : category;
+}
+
+function normalizeCategoryOptions(options) {
+  return [...new Set((options || []).map(normalizeCategoryName).filter(Boolean))];
+}
+
+function getSecondaryCategoryOptions(options) {
+  return normalizeCategoryOptions(options).filter(category => !PRIMARY_CATEGORIES.includes(category));
+}
+
 // DOM要素
 // DOM Elements
 const titleEl = document.getElementById("title");
@@ -7,6 +23,7 @@ const tagInput = document.getElementById("tagInput");
 const tagsContainer = document.getElementById("tagsContainer");
 const categoryInput = document.getElementById("categoryInput");
 const categoriesContainer = document.getElementById("categoriesContainer");
+const primaryCategoriesContainer = document.getElementById("primaryCategories");
 const suggestedCategoriesContainer = document.getElementById("suggestedCategories");
 const ratingStars = document.getElementById("ratingStars");
 const hallOfFameEl = document.getElementById("hallOfFame");
@@ -36,6 +53,7 @@ const saveFeedbackText = document.getElementById("saveFeedbackText");
 const saveFeedbackDetails = document.getElementById("saveFeedbackDetails");
 const duplicateWarning = document.getElementById("duplicateWarning");
 const duplicateLink = document.getElementById("duplicateLink");
+const preserveImagesEl = document.getElementById("preserveImages");
 const overwriteCoverEl = document.getElementById("overwriteCover");
 const candidatesWarning = document.getElementById("candidatesWarning");
 const candidatesList = document.getElementById("candidatesList");
@@ -50,10 +68,11 @@ const imagePreviewClose = document.getElementById("imagePreviewClose");
 const imagePreviewPrev = document.getElementById("imagePreviewPrev");
 const imagePreviewNext = document.getElementById("imagePreviewNext");
 const migrateGenreBtn = document.getElementById("migrateGenreBtn");
+const migrateForeignMovieBtn = document.getElementById("migrateForeignMovieBtn");
 const migrationStatusEl = document.getElementById("migrationStatus");
 
 // 状態
-const VERSION = "v1.38.3";
+const VERSION = "v1.44.0";
 const PRIME_VIDEO_STOREFRONT_URL = "https://www.amazon.co.jp/gp/video/storefront";
 let currentRating = 0;
 let tags = [];
@@ -88,7 +107,7 @@ function makeRecordSnapshot(source) {
     description: source.description || "",
     director: source.director || "",
     tags: [...(source.tags || [])].sort().join("\n"),
-    categories: [...(source.categories || [])].sort().join("\n"),
+    categories: normalizeCategoryOptions(source.categories).sort().join("\n"),
     status: source.status || "",
     rating: Number(source.rating || 0),
     hallOfFame: Boolean(source.hallOfFame),
@@ -216,6 +235,26 @@ migrateGenreBtn.addEventListener("click", async () => {
   }
 });
 
+migrateForeignMovieBtn.addEventListener("click", async () => {
+  if (!confirm("全ページの旧カテゴリ名を「外国映画」へ置換し、全件成功後に旧選択肢を削除します。実行しますか？")) return;
+  migrateForeignMovieBtn.disabled = true;
+  migrationStatusEl.textContent = "カテゴリ名を移行中...";
+  migrationStatusEl.className = "status loading";
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "MIGRATE_FOREIGN_MOVIE_CATEGORY" });
+    if (!res?.ok) throw new Error(res?.error || "移行に失敗しました");
+    migrationStatusEl.textContent = res.alreadyMigrated
+      ? "旧カテゴリ名はすでに移行済みです"
+      : `移行完了: ${res.totalPages}件確認 / ${res.updatedPages}件更新 / 旧選択肢${res.removedOldOption ? "削除済み" : "なし"}`;
+    migrationStatusEl.className = "status success";
+  } catch (error) {
+    migrationStatusEl.textContent = `移行失敗: ${error.message}`;
+    migrationStatusEl.className = "status error";
+  } finally {
+    migrateForeignMovieBtn.disabled = false;
+  }
+});
+
   // タイトル変更時に重複チェックを再実行
   titleEl.addEventListener("blur", () => {
     if (titleEl.value.trim()) {
@@ -243,6 +282,7 @@ migrateGenreBtn.addEventListener("click", async () => {
 
   // 既存タグ・ステータス候補の取得
   fetchNotionTags();
+  renderSuggestedCategories([]);
   fetchNotionCategories();
   fetchNotionStatusOptions();
 })();
@@ -492,22 +532,18 @@ function configureNotionLink(linkEl, data) {
   linkEl.title = "NotionページのURLを取得できませんでした";
 }
 
+function showDuplicateWarning() {
+  preserveImagesEl.checked = true;
+  duplicateWarning.style.display = "block";
+}
+
 async function checkDuplicate(title) {
   try {
     const res = await chrome.runtime.sendMessage({ type: "CHECK_DUPLICATE", asin: currentAsin, title });
     if (res?.ok && res.duplicate) {
       existingPageId = res.pageId;
       existingRecordSnapshot = makeRecordSnapshot(res);
-      // チェックボックスを残しつつテキスト部分のみ更新
-      const linkEl = duplicateWarning.querySelector("#duplicateLink");
-      if (linkEl) {
-        configureNotionLink(linkEl, res);
-      }
-      // テキストノードを更新（先頭のテキストのみ）
-      const textNode = duplicateWarning.firstChild;
-      if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-        textNode.textContent = "⚠️ すでに登録されています：";
-      }
+      configureNotionLink(duplicateLink, res);
 
       // 既存データの各フィールドへの反映
       if (res.rating !== undefined) {
@@ -519,7 +555,7 @@ async function checkDuplicate(title) {
         tags = res.tags;
         renderTags();
       }
-      categories = [...new Set([...(res.categories || []), ...categories])];
+      categories = normalizeCategoryOptions([...(res.categories || []), ...categories]);
       renderCategories();
       if (res.description) {
         noteEl.value = res.description;
@@ -537,7 +573,7 @@ async function checkDuplicate(title) {
       // 既存コメントは読み取り専用エリアに表示（新規入力欄には入れない）
       showExistingComments(res.comment || "");
 
-      duplicateWarning.style.display = "block";
+      showDuplicateWarning();
       hasCover = res.hasCover || false;
       existingFiles = res.existingFiles || [];
 
@@ -598,17 +634,12 @@ function renderCandidatesList(candidates) {
       hasCover = c.hasCover || false;
       existingFiles = c.existingFiles || [];
 
-      const linkEl = duplicateWarning.querySelector("#duplicateLink");
-      if (linkEl) configureNotionLink(linkEl, c);
-      const textNode = duplicateWarning.firstChild;
-      if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-        textNode.textContent = "⚠️ すでに登録されています：";
-      }
+      configureNotionLink(duplicateLink, c);
 
       if (c.rating !== undefined) { currentRating = c.rating; updateStars(); }
       hallOfFameEl.checked = Boolean(c.hallOfFame);
       if (c.tags) { tags = c.tags; renderTags(); }
-      categories = [...new Set([...(c.categories || []), ...categories])];
+      categories = normalizeCategoryOptions([...(c.categories || []), ...categories]);
       renderCategories();
       if (c.description) noteEl.value = c.description;
       if (c.director) extractedData.director = c.director;
@@ -623,7 +654,7 @@ function renderCandidatesList(candidates) {
         showExistingComments("");
       }
 
-      duplicateWarning.style.display = "block";
+      showDuplicateWarning();
       candidatesWarning.style.display = "none";
     };
 
@@ -652,7 +683,7 @@ async function fetchNotionTags() {
 async function fetchNotionCategories() {
   try {
     const res = await chrome.runtime.sendMessage({ type: "GET_NOTION_CATEGORIES" });
-    if (res?.ok) renderSuggestedCategories(res.categories || []);
+    if (res?.ok) renderSuggestedCategories(normalizeCategoryOptions(res.categories));
   } catch (error) {
     console.error("カテゴリ候補取得エラー:", error);
   }
@@ -764,6 +795,8 @@ chrome.runtime.onMessage.addListener((msg) => {
     return true;
   }
 
+  // 型付きの内部要求を作品データとして扱わない（画像検査・Notion操作など）
+  if (msg?.type) return;
   // 抽出完了メッセージ等のハンドリング
   handleExtractedMessage(msg);
   return true;
@@ -839,8 +872,8 @@ function handleExtractedMessage(data) {
   if (data.url) extractedData.url = data.url;
   if (data.watched) extractedData.watched = data.watched;
   if (Array.isArray(data.categories)) {
-    autoCategories = [...new Set(data.categories)];
-    const excluded = new Set(categoryExclusions[currentAsin] || []);
+    autoCategories = normalizeCategoryOptions(data.categories);
+    const excluded = new Set(normalizeCategoryOptions(categoryExclusions[currentAsin]));
     categories = autoCategories.filter(category => !excluded.has(category));
     renderCategories();
   }
@@ -1145,6 +1178,7 @@ function renderTags() {
 }
 
 categoryInput.addEventListener("keydown", event => {
+  if (event.isComposing || event.keyCode === 229) return;
   if (event.key === "Enter" && categoryInput.value.trim()) {
     event.preventDefault();
     const category = categoryInput.value.trim();
@@ -1155,6 +1189,7 @@ categoryInput.addEventListener("keydown", event => {
 });
 
 function addCategory(text) {
+  text = normalizeCategoryName(text);
   if (!categories.includes(text)) categories.push(text);
   if (currentAsin && (categoryExclusions[currentAsin] || []).includes(text)) {
     categoryExclusions[currentAsin] = categoryExclusions[currentAsin].filter(category => category !== text);
@@ -1166,6 +1201,7 @@ function addCategory(text) {
 }
 
 function removeCategory(text) {
+  text = normalizeCategoryName(text);
   categories = categories.filter(category => category !== text);
   if (currentAsin && autoCategories.includes(text)) {
     categoryExclusions[currentAsin] = [...new Set([...(categoryExclusions[currentAsin] || []), text])];
@@ -1176,6 +1212,7 @@ function removeCategory(text) {
 }
 
 function renderCategories() {
+  categories = normalizeCategoryOptions(categories);
   categoriesContainer.querySelectorAll(".tag").forEach(element => element.remove());
   categories.forEach(category => {
     const categoryEl = document.createElement("span");
@@ -1189,22 +1226,28 @@ function renderCategories() {
     applyChipColor(categoryEl, category, "selected");
     categoriesContainer.insertBefore(categoryEl, categoryInput);
   });
-  suggestedCategoriesContainer.querySelectorAll(".tag-chip").forEach(chip => {
-    chip.classList.toggle("selected", categories.includes(chip.textContent));
+  document.querySelectorAll(".category-chip").forEach(chip => {
+    const selected = categories.includes(chip.dataset.category);
+    chip.classList.toggle("selected", selected);
+    chip.setAttribute("aria-pressed", String(selected));
   });
 }
 
+function createCategoryChip(category, primary = false) {
+  const chip = document.createElement("button");
+  chip.type = "button";
+  chip.className = `tag-chip category-chip${primary ? " primary-category-chip" : ""}`;
+  chip.dataset.category = category;
+  chip.textContent = category;
+  if (!primary) applyChipColor(chip, category, "candidate");
+  chip.addEventListener("click", () => categories.includes(category) ? removeCategory(category) : addCategory(category));
+  return chip;
+}
+
 function renderSuggestedCategories(options) {
-  suggestedCategoriesContainer.replaceChildren();
-  options.forEach(category => {
-    const chip = document.createElement("span");
-    chip.className = "tag-chip";
-    chip.textContent = category;
-    applyChipColor(chip, category, "candidate");
-    chip.classList.toggle("selected", categories.includes(category));
-    chip.addEventListener("click", () => categories.includes(category) ? removeCategory(category) : addCategory(category));
-    suggestedCategoriesContainer.appendChild(chip);
-  });
+  primaryCategoriesContainer.replaceChildren(...PRIMARY_CATEGORIES.map(category => createCategoryChip(category, true)));
+  suggestedCategoriesContainer.replaceChildren(...getSecondaryCategoryOptions(normalizeCategoryOptions(options)).map(category => createCategoryChip(category)));
+  renderCategories();
 }
 
 // レーティング機能
@@ -1251,15 +1294,7 @@ reloadBtn.addEventListener("click", async () => {
   reloadBtn.classList.add("spinning");
   try {
     // 状態をリセット
-    existingPageId = null;
-    hasCover = false;
-    existingFiles = [];
-    currentAsin = "";
-    extractedData = {};
-    imageCandidates = [];
-    currentImageIndex = 0;
-    pageCoverIndex = -1;
-    slideIndex = 0;
+    resetPageStateForNewExtraction();
     lastExtractedPageKey = "";
     currentRating = 0;
     updateStars();
@@ -1270,10 +1305,6 @@ reloadBtn.addEventListener("click", async () => {
     titleEl.value = "";
     noteEl.value = "";
     commentEl.value = "";
-    duplicateWarning.style.display = "none";
-    showExistingComments("");
-    renderCandidatesList([]);
-    carouselTrack.innerHTML = "";
 
     // アクティブタブを取得
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -1398,7 +1429,7 @@ saveBtn.addEventListener("click", async () => {
     image: coverImage,
     pageCoverImage: pageCoverImage,
     images: otherImages,
-    categories: categories,
+    categories: normalizeCategoryOptions(categories),
     rating: currentRating,
     hallOfFame: hallOfFameEl.checked,
     director: extractedData?.director || "",

@@ -2,7 +2,11 @@
   "scripts": {
     "check:version": "node scripts/check-version-sync.js",
     "check:version:staged": "node scripts/check-version-sync.js --staged",
+    "check:foreign-movie-migration": "node scripts/check-foreign-movie-migration.js",
+    "check:primary-categories": "node scripts/check-primary-categories.js",
+    "check:page-state-reset": "node scripts/check-page-state-reset.js",
     "check:title-cleanup": "node scripts/check-title-cleanup.js",
+    "check:image-filter": "node scripts/check-image-filter.js",
     "check:image-replacement": "node scripts/check-image-replacement.js",
     "check:notion-page-url": "node scripts/check-notion-page-url.js"
   }

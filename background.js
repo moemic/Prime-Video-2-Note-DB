@@ -7,6 +7,8 @@ const QUERY_PAGE_SIZE = 100;
 const MAX_CANDIDATE_SCAN_PAGES = 5;
 const NOTION_MIN_INTERVAL_MS = 350;
 const NOTION_MAX_RETRIES = 5;
+const LEGACY_FOREIGN_MOVIE_CATEGORY = "海外映画";
+const FOREIGN_MOVIE_CATEGORY = "外国映画";
 let notionQueue = Promise.resolve();
 let lastNotionRequestAt = 0;
 const hallOfFameSchemaReady = new Set();
@@ -91,6 +93,14 @@ function trimNotionText(text) {
     return normalized.length > NOTION_TEXT_MAX_LENGTH
         ? normalized.slice(0, NOTION_TEXT_MAX_LENGTH)
         : normalized;
+}
+
+function normalizeCategoryName(category) {
+    return category === LEGACY_FOREIGN_MOVIE_CATEGORY ? FOREIGN_MOVIE_CATEGORY : category;
+}
+
+function normalizeCategories(categories) {
+    return [...new Set((categories || []).map(normalizeCategoryName).filter(Boolean))];
 }
 
 function stableHash(input) {
@@ -309,7 +319,7 @@ async function createNotionPage({ notionToken, notionDbId, payload }) {
 
     // タグを「ジャンル」（multi_select）に入れる
     properties["カテゴリ"] = {
-        "multi_select": (payload.categories || []).map(category => ({ "name": trimNotionText(category) }))
+        "multi_select": normalizeCategories(payload.categories).map(category => ({ "name": trimNotionText(category) }))
     };
 
     // レーティングを「オススメ度」（select）に入れる
@@ -528,7 +538,7 @@ async function getNotionDatabaseOptions({ notionToken, notionDbId }) {
     }
     const categoryProperty = db.properties["カテゴリ"];
     if (categoryProperty?.multi_select?.options) {
-        categoryProperty.multi_select.options.forEach(opt => { if (opt.name) categories.add(opt.name); });
+        categoryProperty.multi_select.options.forEach(opt => { if (opt.name) categories.add(normalizeCategoryName(opt.name)); });
     }
 
     const statusProperty = db.properties["ステータス"];
@@ -560,7 +570,7 @@ async function getNotionDatabaseOptions({ notionToken, notionDbId }) {
                 if (tag.name) tags.add(tag.name);
             });
             (props["カテゴリ"]?.multi_select || []).forEach(category => {
-                if (category.name) categories.add(category.name);
+                if (category.name) categories.add(normalizeCategoryName(category.name));
             });
 
             const statusName = props["ステータス"]?.status?.name || props["ステータス"]?.select?.name || "";
@@ -594,7 +604,7 @@ function buildExistingData(page) {
         rating: props["オススメ度"]?.select ? selectNameToRating(props["オススメ度"].select.name) : 0,
         hallOfFame: Boolean(props["殿堂入り"]?.checkbox),
         tags: props["ジャンル"]?.multi_select ? props["ジャンル"].multi_select.map(t => t.name) : [],
-        categories: props["カテゴリ"]?.multi_select ? props["カテゴリ"].multi_select.map(t => t.name) : [],
+        categories: normalizeCategories(props["カテゴリ"]?.multi_select?.map(t => t.name)),
         description: props["概要"]?.rich_text ? props["概要"].rich_text.map(t => t.plain_text).join("") : "",
         director: props["監督"]?.rich_text ? props["監督"].rich_text.map(t => t.plain_text).join("") : "",
         date: props["日付"]?.date ? props["日付"].date.start : "",
@@ -787,7 +797,7 @@ async function migrateGenreToCategory({ notionToken, notionDbId }) {
             totalPages++;
             const genre = (page.properties?.["ジャンル"]?.multi_select || []).map(item => item.name).filter(Boolean);
             const category = (page.properties?.["カテゴリ"]?.multi_select || []).map(item => item.name).filter(Boolean);
-            const merged = [...new Set([...category, ...genre])];
+            const merged = normalizeCategories([...category, ...genre]);
             if (genre.length === 0) continue;
             const updateRes = await notionFetch(`https://api.notion.com/v1/pages/${page.id}`, {
                 method: "PATCH", headers,
@@ -813,7 +823,154 @@ async function migrateGenreToCategory({ notionToken, notionDbId }) {
     return { alreadyMigrated: false, totalPages, updatedPages };
 }
 
+function getCategoryMultiSelectProperty(database) {
+    const categoryProperty = database?.properties?.["カテゴリ"];
+    if (!categoryProperty || categoryProperty.type !== "multi_select" || !categoryProperty.multi_select) {
+        throw new Error("Notionの「カテゴリ」プロパティをマルチセレクト型にしてください");
+    }
+    return categoryProperty;
+}
+
+async function getNotionDatabase({ databaseUrl, headers }) {
+    const response = await notionFetch(databaseUrl, { method: "GET", headers });
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Notionデータベースを確認できませんでした");
+    }
+    return response.json();
+}
+
+async function migrateForeignMovieCategory({ notionToken, notionDbId }) {
+    const headers = { "Authorization": `Bearer ${notionToken}`, "Notion-Version": NOTION_VERSION, "Content-Type": "application/json" };
+    const databaseUrl = `https://api.notion.com/v1/databases/${notionDbId}`;
+    const legacyFilter = { property: "カテゴリ", multi_select: { contains: LEGACY_FOREIGN_MOVIE_CATEGORY } };
+    const database = await getNotionDatabase({ databaseUrl, headers });
+    const categoryProperty = getCategoryMultiSelectProperty(database);
+    const hadOldOption = categoryProperty.multi_select.options.some(option => option.name === LEGACY_FOREIGN_MOVIE_CATEGORY);
+    let totalPages = 0;
+    let updatedPages = 0;
+
+    // 更新済みページは検索結果から消えるため、cursorを使わず先頭ページを繰り返す。
+    while (true) {
+        const data = await queryNotionDatabase({ notionToken, notionDbId, filter: legacyFilter, pageSize: QUERY_PAGE_SIZE });
+        const pages = data.results || [];
+        if (pages.length === 0) break;
+
+        for (const page of pages) {
+            totalPages++;
+            const categories = normalizeCategories((page.properties?.["カテゴリ"]?.multi_select || []).map(item => item.name));
+            const updateResponse = await notionFetch(`https://api.notion.com/v1/pages/${page.id}`, {
+                method: "PATCH",
+                headers,
+                body: JSON.stringify({ properties: { "カテゴリ": { multi_select: categories.map(name => ({ name })) } } })
+            });
+            if (!updateResponse.ok) {
+                const errorData = await updateResponse.json();
+                throw new Error(`${totalPages}件目のカテゴリ移行に失敗: ${errorData.message || updateResponse.status}`);
+            }
+            updatedPages++;
+        }
+    }
+
+    const confirmation = await queryNotionDatabase({ notionToken, notionDbId, filter: legacyFilter, pageSize: QUERY_PAGE_SIZE });
+    const remainingPages = (confirmation.results || []).length;
+    if (remainingPages > 0) {
+        throw new Error(`旧カテゴリが${remainingPages}件残っているため、スキーマは変更していません`);
+    }
+    if (!hadOldOption) {
+        return { alreadyMigrated: totalPages === 0, totalPages, updatedPages, remainingPages, removedOldOption: false };
+    }
+
+    const latestDatabase = await getNotionDatabase({ databaseUrl, headers });
+    const latestCategoryProperty = getCategoryMultiSelectProperty(latestDatabase);
+    const oldOptionExists = latestCategoryProperty.multi_select.options.some(option => option.name === LEGACY_FOREIGN_MOVIE_CATEGORY);
+    if (!oldOptionExists) {
+        return { alreadyMigrated: false, totalPages, updatedPages, remainingPages, removedOldOption: false };
+    }
+
+    const remainingOptions = latestCategoryProperty.multi_select.options.filter(option => option.name !== LEGACY_FOREIGN_MOVIE_CATEGORY);
+    if (remainingOptions.some(option => !option.id)) {
+        throw new Error("旧カテゴリ選択肢を安全に削除できません: 既存選択肢のIDがありません");
+    }
+    const removeOptionResponse = await notionFetch(databaseUrl, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({
+            properties: {
+                "カテゴリ": {
+                    multi_select: {
+                        options: remainingOptions.map(option => ({ id: option.id }))
+                    }
+                }
+            }
+        })
+    });
+    if (!removeOptionResponse.ok) {
+        const errorData = await removeOptionResponse.json();
+        throw new Error(`ページ移行済みですが旧カテゴリ選択肢を削除できませんでした: ${errorData.message || removeOptionResponse.status}`);
+    }
+
+    const verifiedDatabase = await getNotionDatabase({ databaseUrl, headers });
+    const verifiedCategoryProperty = getCategoryMultiSelectProperty(verifiedDatabase);
+    if (verifiedCategoryProperty.multi_select.options.some(option => option.name === LEGACY_FOREIGN_MOVIE_CATEGORY)) {
+        throw new Error("旧カテゴリ選択肢が残っているため、移行を完了できませんでした");
+    }
+    return { alreadyMigrated: false, totalPages, updatedPages, remainingPages, removedOldOption: true };
+}
+
+// ponytail: 縮小画素による黒帯判定。極細の帯や暗い絵柄で問題が出たら解像度・閾値を調整する。
+function hasHorizontalBlackBars(data, width, height) {
+    const isBlackRow = (y) => {
+        let black = 0;
+        for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
+            if (data[i + 3] >= 250 && Math.max(data[i], data[i + 1], data[i + 2]) <= 24) black++;
+        }
+        return black / width >= 0.98;
+    };
+    return isBlackRow(0) && isBlackRow(1) && isBlackRow(height - 2) && isBlackRow(height - 1);
+}
+
+async function inspectPrimeImage(url) {
+    let bitmap;
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== "https:" || !parsed.hostname.endsWith(".media-amazon.com") ||
+            !/^\/images\/(?:I\/|S\/pv-target-images\/)/.test(parsed.pathname) || parsed.username || parsed.password || parsed.port) {
+            throw new Error("Amazon作品画像以外は検査できません");
+        }
+        const response = await fetch(parsed.href, {
+            credentials: "omit", redirect: "error", signal: AbortSignal.timeout(10000)
+        });
+        if (!response.ok) throw new Error(`画像取得失敗: ${response.status}`);
+        const blob = await response.blob();
+        bitmap = await createImageBitmap(blob);
+        // 縦長ポスターは候補に残し、並び順で横長画像より後ろにする
+        if (bitmap.width > 0 && bitmap.height > bitmap.width) {
+            return { usable: true, portrait: true, size: blob.size };
+        }
+        if (!bitmap.height || Math.abs(bitmap.width / bitmap.height - 16 / 9) > 0.04) {
+            return { usable: false, size: blob.size };
+        }
+        const canvas = new OffscreenCanvas(320, 180);
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bitmap, 0, 0, 320, 180);
+        const { data } = ctx.getImageData(0, 0, 320, 180);
+        return { usable: !hasHorizontalBlackBars(data, 320, 180), size: blob.size };
+    } catch (error) {
+        console.warn("Prime画像検査失敗:", url, error.message);
+        return { usable: false, size: 0 };
+    } finally {
+        bitmap?.close();
+    }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === "INSPECT_PRIME_IMAGE") {
+        inspectPrimeImage(msg.url).then(sendResponse);
+        return true;
+    }
+
     if (msg?.type === "SWITCH_DISPLAY_MODE") {
         (async () => {
             try {
@@ -1003,6 +1160,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
                 sendResponse({ ok: true, ...result });
             } catch (error) {
                 console.error("Genre migration error:", error);
+                sendResponse({ ok: false, error: String(error.message || error) });
+            }
+        })();
+        return true;
+    }
+
+    if (msg?.type === "MIGRATE_FOREIGN_MOVIE_CATEGORY") {
+        (async () => {
+            const { notionToken, notionDbId } = await chrome.storage.local.get(["notionToken", "notionDbId"]);
+            try {
+                if (!notionToken || !notionDbId) throw new Error("先にNotion設定を保存してください");
+                const result = await migrateForeignMovieCategory({ notionToken, notionDbId });
+                sendResponse({ ok: true, ...result });
+            } catch (error) {
+                console.error("Foreign movie category migration error:", error);
                 sendResponse({ ok: false, error: String(error.message || error) });
             }
         })();

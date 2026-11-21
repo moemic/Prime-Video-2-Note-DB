@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Prime Video → Notion Importer",
-  "version": "1.38.3",
+  "version": "1.44.0",
   "description": "Prime Videoの作品ページから情報を抜き出してNotion DBに保存します。",
   "icons": {
     "16": "icons/icon128.png",
@@ -22,7 +22,8 @@
     "https://watch.amazon.co.jp/*",
     "https://www.amazon.co.jp/*",
     "https://www.primevideo.com/*",
-    "https://api.notion.com/*"
+    "https://api.notion.com/*",
+    "https://*.media-amazon.com/*"
   ],
   "action": {
     "default_title": "Notionに保存",
